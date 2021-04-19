@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 
 '''
 This version of the script can use the advanced modelisation from SAOTRACE and thus reprocesses
-part of the data to create it's parameter files. This means the starting directory should be
+part of the data to create its parameter files. This means the starting directory should be
 set to the reprocessed directory
 
 Some aspects of the scripts are specifically tailored towards POINT SOURCES
