@@ -46,9 +46,11 @@ sao_arg='no'
 nsim=10000
 
 #starting dir
+# sdir='/home/mparra/PARRA/Observ/Andres/2950/repro/'
 sdir='/home/mparra/PARRA/Observ/Andres/4748/repro/'
 
 #starting region
+# regfile='ngc1313x1_extraction.reg'
 regfile='ngc1313x1_fk5.reg'
 
 #background region (will be used later)
@@ -63,6 +65,10 @@ max_factor=2
 #chandra pixel to arsec ratio
 pta=0.492
 
+#radius affected by pile-up in the initial data in arsecs
+# rlim_pileup=1.2
+rlim_pileup=1.0
+ 
 '''############'''
 
 if sao_arg=='maybe':
@@ -333,6 +339,9 @@ os.system('mv *marx* '+outdirs[decis_int])
 We  divide our regions in nbins (default 10) annuli ranging from the source center to 
 twice the maximal dimension of the source region (which should be an ellipse or a circle in sky region)
 
+At the end we renormalize the outer parts of the PSF to reduce errors. 
+The inner limit results from manual computations of the proportion of the initial data affected by pile-up.
+
 We also use our own computation of the source center instead of the source centroid
  
 -> You'll need to change a few things to use ellipsoid annuli
@@ -344,13 +353,72 @@ If you use composite background regions you'll need to adapt the very last part
 if type(source_reg).__name__=='EllipseSkyRegion':
     largestsize=np.maximum(source_reg.width,source_reg.height)
 elif type(source_reg).__name__=='CircleSkyRegion':
-    largestize=source_reg.radius
+    largestsize=source_reg.radius
     
 maxsize=largestsize*max_factor
 
 #we will write the command line in pixels to avoid complications
 maxsize_pixel=round(maxsize.value/pta,2)
 step=maxsize_pixel/nbins
+
+#First we extract the annuli for the initial file, this time with a background file
+#however, chandra can't read directly the background file in our case so we rewrite it in an
+#acceptable format
+
+f_bg=open(bgregfile,'r')
+bg_lines=f_bg.readlines()
+
+#sometimes ds9 doesn't bother including the format (fk5 for example) when saving regions, so we test
+#the length of the third line. If it's long, it's probably the region line instead of a format
+if len(bg_lines[2])<20:
+    bgreg_line=bg_lines[3]
+else :
+    bgreg_line=bg_lines[2]
+
+f_bg_marx=open('marx_bg.reg','w+')
+f_bg_marx.write(bgreg_line[:bgreg_line.find('#')])
+f_bg_marx.close()
+    
+#string used in the command line
+str_annulus='[bin sky=annulus('+str(ctr_x)+','+str(ctr_y)+',0:'\
+              +str(maxsize_pixel)+':'+str(step)+')]'
+              
+#With this we can extract the entire concentric annuli in one go
+os.system('dmextract "'+evt2+str_annulus+'" bkg="'+evt2+'[bin sky=@marx_bg.reg]"'\
+          +' outfile=curr_profile.fits opt=generic clobber=yes')
+
+#after which we store the surface brillance values and associated 1 sigma errors in arrays
+with fits.open('curr_profile.fits') as curr_profile :
+    sbdata=curr_profile[1].data['SUR_BRI']
+    sbdata_err=curr_profile[1].data['SUR_BRI_ERR']
+
+#3 sigma intervals on the initial data (not necessary for the plot but can be called after the script 
+#for the values)
+sig1_data=np.transpose(np.array([sbdata-1*sbdata_err,sbdata+1*sbdata_err]))
+sig3_data=np.transpose(np.array([sbdata-3*sbdata_err,sbdata+3*sbdata_err]))
+
+'''computations for the renormalization'''
+
+#conversion of the renormalisation annuli's inner and outer radius
+rlim_pixel=round(rlim_pileup/pta,2)
+largestsize_pixel=round(largestsize.value,2)/pta
+
+#second version of the command line string
+str_annulus_renorm='[bin sky=annulus('+str(ctr_x)+','+str(ctr_y)+','+str(rlim_pixel)+':'\
+              +str(largestsize_pixel)+':'+str(largestsize_pixel-rlim_pixel)+')]'
+
+#extracting the annulus for the data
+os.system('dmextract "'+evt2+str_annulus_renorm+'" bkg="'+evt2+'[bin sky=@marx_bg.reg]"'\
+          +' outfile=curr_profile.fits opt=generic clobber=yes')
+
+#now we can get the renormalization data value
+with fits.open('curr_profile.fits') as curr_profile :
+    sbdata_norm=curr_profile[1].data['SUR_BRI'][0]
+
+#we finish by moving the products to the out directory
+os.system('mv curr_profile.fits marx_bg.reg '+outdirs[decis_int])
+
+'''evaluations for the simulations'''
 
 #we start by creating a single region with every single annuli region inside for visualisation
 #since write_ds9's format isn't usable by Chandra, we write the regions manually
@@ -384,21 +452,27 @@ f_reg.close()
 
 os.system('punlearn dmextract')
 
-#we end up extracting the entire annuli in one go, and store the surface brillance
-#values and associated 1 sigma errors in arrays 
+
+#Now, we extract the renormalization annuli and the concentric annuli in a similar manner than with the data, 
+#adding the renormalization
 
 sblist=np.array([[None]*nbins]*nsim)
 sblist_err=np.array([[None]*nbins]*nsim)
+sblist_norm=np.array([None]*nsim)
+             
 
-str_annulus='[bin sky=annulus('+str(ctr_x)+','+str(ctr_y)+',0:'\
-              +str(maxsize_pixel)+':'+str(step)+')]'
-              
 for i in range(1,nsim+1):
     currfile=fitsname[decis_int]+str(i)+'.fits'
+    
+    os.system('dmextract "'+currfile+str_annulus_renorm+'" outfile=curr_profile.fits opt=generic clobber=yes')
+    with fits.open('curr_profile.fits') as curr_profile:
+        sblist_norm[i-1]=curr_profile[1].data['SUR_BRI'][0]
+        
     os.system('dmextract "'+currfile+str_annulus+'" outfile=curr_profile.fits opt=generic clobber=yes')
-    curr_profile=fits.open('curr_profile.fits')
-    sblist[i-1]=curr_profile[1].data['SUR_BRI']
-    sblist_err[i-1]=curr_profile[1].data['SUR_BRI_ERR']
+    with fits.open('curr_profile.fits') as curr_profile:
+        sblist[i-1]=curr_profile[1].data['SUR_BRI']*sbdata_norm/sblist_norm[i-1]
+        sblist_err[i-1]=curr_profile[1].data['SUR_BRI_ERR']*sbdata_norm/sblist_norm[i-1]
+    
 
 #ordering and transposing the surface brillance list for easier manipulation    
 ord_sblist=np.sort(np.transpose(sblist))
@@ -435,42 +509,7 @@ for i in range(nbins):
     sig3_list[i][0]=ord_sblist[i][ind3_lo]-3*ord_sblist_err[i][ind3_lo]
     sig3_list[i][1]=ord_sblist[i][ind3_up]+3*ord_sblist_err[i][ind3_up]
 
-os.chdir('..')
-
-#One final analysis for the initial file, this time with a background file
-#however, chandra can't read directly the background file in our case so we rewrite it in an
-#acceptable format
-
-f_bg=open(bgregfile,'r')
-bg_lines=f_bg.readlines()
-
-#sometimes ds9 doesn't bother including the format (fk5 for example) when saving regions, so we test
-#the length of the third line. If it's long, it's probably the region line instead of a format
-if len(bg_lines[2])<20:
-    bgreg_line=bg_lines[3]
-else :
-    bgreg_line=bg_lines[2]
-
-f_bg_marx=open('marx_bg.reg','w+')
-f_bg_marx.write(bgreg_line[:bgreg_line.find('#')])
-f_bg_marx.close()
-    
-os.system('dmextract "'+evt2+str_annulus+'" bkg="'+evt2+'[bin sky=@marx_bg.reg]"'\
-          +' outfile=curr_profile.fits opt=generic clobber=yes')
-
-#moving the files to the marx_outs folder
-os.system('mv curr_profile.fits marx_bg.reg '+outdirs[decis_int])
-os.chdir(outdirs[decis_int])
-
-#loading it 
-curr_profile=fits.open('curr_profile.fits')
-sbdata=curr_profile[1].data['SUR_BRI']
-sbdata_err=curr_profile[1].data['SUR_BRI_ERR']
-
-#3 sogma intervals on the initial data (not necessary for the plot but can be called after the script 
-#for the values)
-sig1_data=np.transpose(np.array([sbdata-1*sbdata_err,sbdata+1*sbdata_err]))
-sig3_data=np.transpose(np.array([sbdata-3*sbdata_err,sbdata+3*sbdata_err]))
+os.chdir('..')   
 
 #%% graphs
 
@@ -532,34 +571,14 @@ def radtoratio(x):
 
 sec_ax=ax_marx.secondary_xaxis('top',functions=(ratiotorad,radtoratio))
 sec_ax.set_xlabel('angle (")')
-#%% old stuff
-#in case of model 
 
-# modpath=sdir+'best_fit.xcm'
-# Xset.restore(modpath)
-# model=AllModels(1)
+'''ks test'''
+from scipy.stats import ks_2samp
 
-# #taking of the pileup component if it exists
-# if model.componentNames[0]=='pileup':
-#     modexpr=model.expression
-#     modpars=np.array([None]*(model.nParameters-7))
-#     for  i in range(len(modpars)):
-        
-#         #parameters indexation begins at 1
-#         modpars[i]=model(i+8).values
-        
-#     AllModels+=modexpr[7:]
-#     model=AllModels(1)
-#     for i in range(len(modpars)):
-#         model(i+1).values=modpars[i]
-        
-# if os.path.exists('model_pfree.xcm'):
-#     os.remove('model_pfree.xcm')
-# Xset.save('model_pfree.xcm',info='m')
+med_list=np.array([ord_sblist[i][int(np.floor(nsim/2))] for i in range(nbins)])
 
-# marx_set=FakeitSettings(correction=1/cor_factor,fileName='fake_spectrum.pi')
+ks, p = ks_2samp(med_list,sbdata)
 
-# AllData.fakeit(settings=marx_set)
-
-# os.system('xspec2marx fake_spectrum.pi > marx_arg_model.txt')
-
+print('Result of the ks test between the data and the median marx simulation :')
+print('ks =',ks)
+print('p value for both samples coming from the same distribution =',p)
