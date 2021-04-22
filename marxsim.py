@@ -1,6 +1,6 @@
-# @Author: Andrés Gúrpide <agurpide>
+# @Author: Maxime Parra
 # @Date:   21-04-2021
-# @Email:  agurpidelash@irap.omp.eu
+# @Email: 
 # @Last modified by:   agurpide
 # @Last modified time: 22-04-2021
 
