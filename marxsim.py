@@ -69,8 +69,9 @@ nbins=10
 #maximum annuli size ratio compared to the maximal dimension of the source region
 max_factor=2
 
-#chandra pixel to arsec ratio
-pta=0.492
+#chandra pixel to arsec ratio for ACIS
+pta_acis=0.492
+pta_hrc=0.1318
 
 #radius affected by pile-up in the initial data in arsecs
 # rlim_pileup=1.2
@@ -112,12 +113,6 @@ source_reg=read_ds9(regfile)[0]
 #sky coordinates of the region file centroid, will be used as position for the marx simulation
 source_ra=str(source_reg.center.ra.deg)
 source_dec=str(source_reg.center.dec.deg)
-
-'''
-the region doesn't actually enclose the full counts of the source, so we can manually
-correct by comparison to a full region, which here has been manually evaluated
-to a 7" circle region centered on the other region's centroid for the 2950 observation --> REMOVE THIS COMMENT?
-'''
 
 #reading the event file to get some more parameters
 fits_evt2=fits.open(evt2)
@@ -166,16 +161,18 @@ ctr_dec=str(ctr_coord.dec.deg)
 
 #We now also know which part of the instrument is used for the detection
 if instrum=='ACIS':
-    if chip_id in [0,1,2,3]:
+    if chip_id <4:
         detector='ACIS-I'
         subsys='ACIS-I'+str(chip_id)
-    elif chip_id in [4,5,6,7,8,9]:
+    elif chip_id >3:
         detector='ACIS-S'
         subsys='ACIS-S'+str(chip_id-4)
+    pta=pta_acis
 
 if instrum=='HRC':
     detector=input('Since the CCD number overlap in this instrument, please confirm'\
                    +' if the detecor used is HRC-I or HRC-S')
+    pta=pta_hrc
 
 os.system('asphist infile="'+ditherfile+'" outfile="marx.asp" evtfile="'+evt2+'" clobber=yes')
 
