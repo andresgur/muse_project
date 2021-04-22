@@ -1,20 +1,18 @@
-# @Author: Andrés Gúrpide <agurpide>
+# @Author: Maxime Parra and modified by Andrés Gúrpide <agurpide>
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 21-04-2021
+# @Last modified time: 22-04-2021
 
 
 
 #%% initialisation
 import os
-import numpy as np
 from astropy.io import fits
 from astropy.time import Time
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from subprocess import Popen, PIPE
-import matplotlib.pyplot as plt
 import argparse
 import glob
 from regions import read_ds9
@@ -47,10 +45,9 @@ More  details about the comparison at the end of the script
 
 ''' PARAMETERS '''
 parser = argparse.ArgumentParser(description='Parameters for the MARX simulattions.')
-parser.add_argument("-b", "--bins", type=int, help='Number of radial bins for the PSF/data comparison', default=10, nargs='?')
 parser.add_argument("--sao", help='Flag to use sao trace in the simulations (only when high degree of accuracy is needed, see https://cxc.harvard.edu/ciao/PSFs/raytracers.html)', action="store_true")
 parser.add_argument("-r", "--region", help='Source region file', type=str, nargs=1, required=True)
-parser.add_argument("--background", help='Background region file', type=str, nargs=1, required=True)
+parser.add_argument("-b", "--background", help='Background region file', type=str, nargs=1, required=True)
 parser.add_argument("-o", "--obsdir", help='Observation directory', type=str, nargs=1, required=True)
 parser.add_argument("-n", "--nsimulations", help='Number of MARX simulations to perform', type=int, nargs='?', default=500)
 args = parser.parse_args()
@@ -70,11 +67,7 @@ regfile = args.region[0]
 #background region (will be used later)
 bgregfile = args.background[0]
 
-# number of annuli for the PSF computation
-nbins = args.bins
-
-# maximum annuli size ratio compared to the maximal dimension of the source region
-max_factor = 2
+python_argument = "%s -n %d --background %s -r %s -o %s --sao %s" % (__file__, nsim, bgregfile, regfile, sdir, args.sao)
 
 # chandra pixel to arsec ratio
 pta = 0.492
@@ -90,6 +83,7 @@ else:
 
 #ditherfile, there should only be one ditherfile for an observation
 os.chdir("%s" % sdir)
+
 ditherfile = glob.glob('./*_asol1.fits')[0]
 evt2 = glob.glob('./*_evt2.fits')[0]
 
@@ -102,17 +96,6 @@ source_reg = read_ds9(regfile)[0]
 # sky coordinates of the region file centroid, will be used as position for the marx simulation
 source_ra = str(source_reg.center.ra.deg)
 source_dec = str(source_reg.center.dec.deg)
-
-'''
-the region doesn't actually enclose the full counts of the source, so we can manually
-correct by comparison to a full region, which here has been manually evaluated
-to a 7" circle region centered on the other region's centroid for the 2950 observation
-'''
-
-if regfile == 'ngc1313x1_extraction.reg':
-    cor_factor = 0.94
-else:
-    cor_factor = 1
 
 #reading the event file to get some more parameters
 fits_evt2 = fits.open(evt2)
@@ -194,7 +177,7 @@ os.system('arfcorr infile="'+evt2+'[sky=region('+regfile+')][bin sky]" region="r
 #           +':1" image_src.fits option=image clobber=yes')
 
 #source energy computation
-os.system('dmtcalc "'+evt2+'[EVENTS][sky=region('+regfile+')]" marx_evt2_energy.fits'\
+os.system('dmtcalc "' + evt2 + '[EVENTS][sky=region('+regfile+')]" marx_evt2_energy.fits'\
           +' expr="energy=(float)pi*0.0149" clobber=yes')
 
 #bg energy computation. Should be negligible, but included nonetheless
@@ -225,7 +208,7 @@ if sao_arg:
     print("Running SAO TRACE simulation")
     f_sao = open('marx_sao.rdb', 'w+')
 
-    flux = extract_data['NET_RATE'] / (arf_data['SPECRESP']*cor_factor)
+    flux = extract_data['NET_RATE'] / (arf_data['SPECRESP'])
 
     f_sao.write('#argument file for SAOTrace, manually created from marx_extract.spec and marx_corr.arf\n')
     f_sao.write('ENERG_LO\tENERG_HI\tFLUX\n')
@@ -262,9 +245,9 @@ if sao_arg:
               +' Roll_Nom='+roll_nom+' SourceRA='+source_ra+' SourceDEC='+source_dec+' Verbose=yes mode=h'
 
 else:
-    f_marx=open('marx_arg.tbl','w+')
+    f_marx = open('marx_arg.tbl','w+')
 
-    fluxdens=extract_data['NET_RATE']/(arf_data['SPECRESP'] * cor_factor * float(binning))
+    fluxdens = extract_data['NET_RATE']/(arf_data['SPECRESP'] * float(binning))
 
     f_marx.write('#argument file for larx, manually created from marx_extract.spec and marx_corr.arf\n')
     for i in range(len(fluxdens)):
@@ -297,6 +280,8 @@ simdirs=['marx_sim','sao_sim']
 fitsname=['marxsim_','saosim_']
 
 os.system('mkdir -p ' + outdir)
+with open("%s/python_command.txt" % outdir, "w+") as f:
+    f.write(python_argument)
 os.system('mkdir -p ' + simdirs[decis_int])
 
 for i in range(1, nsim + 1):
@@ -316,13 +301,14 @@ for i in range(1, nsim + 1):
     os.chdir('../..')
 
 #deleting all the temporary files
-os.chdir(simdirs[decis_int]+'/pileup')
+os.chdir(simdirs[decis_int] + '/pileup')
 os.system('rm *')
 os.chdir('..')
 os.system('rmdir pileup')
 os.system('rm *')
 os.chdir('..')
-os.system('rmdir '+ simdirs[decis_int])
+os.system('rmdir ' + simdirs[decis_int])
 
 #moving the initialisation files
 os.system('mv *marx* ' + outdir)
+print("Written results to %s" % outdir)

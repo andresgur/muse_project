@@ -18,8 +18,6 @@ import matplotlib.pyplot as plt
 import glob
 import argparse
 from scipy.stats import ks_2samp
-import re
-from pathlib import Path
 
 #marx needs to be installed (https://space.mit.edu/cxc/marx/)
 #saotrace needs to be installed (https://cxc.harvard.edu/cal/Hrma/Raytrace/SAOTrace.html)
