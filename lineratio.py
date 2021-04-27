@@ -44,7 +44,7 @@ def add_maps(linemaps):
 # read arguments
 ap = argparse.ArgumentParser(description='Spectrum fits to be loaded')
 ap.add_argument("-n", "--numerators", nargs='+', help="The line maps to be added in the numerator of the line ratio")
-ap.add_argument("-d", "--denominator", nargs=1, help="The line maps to be added in the denominator of the line ratio")
+ap.add_argument("-d", "--denominator", nargs='+', help="The line maps to be added in the denominator of the line ratio")
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='lineratios')
 ap.add_argument("-f", "--file", nargs='?', help="Output file name (without fits ending)", default='lineratio.fits')
 args = ap.parse_args()
