@@ -204,14 +204,11 @@ def bpt_single(map_1,map_2,regs,conts,out,bptype):
                 color=region.color, ls="None", marker=".", label=region.name)
     ax.legend()
     
-
-    
     y_axis_map[0].data = bpt_data
     if y_axis_map[0].header["WCSAXES"] == 3:
         y_axis_map[0].header["WCSAXES"] = 2
     y_axis_map[0].header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
     outfile = "%s/BPT_%d.fits" % (out, bptype)
-    
 
     y_axis_map.writeto(outfile, overwrite=True)
     img = Image(outfile)
@@ -226,7 +223,7 @@ ap.add_argument("-map_y", nargs=1, help="Map with y-axis line ratio", type=str,d
 ap.add_argument("-map_x", nargs=1, help="Map with x-axis line ratio", type=str,default=None)
 ap.add_argument("-r", "--regions", nargs='*', help="Region files to be overlaid on the image", default=None)
 ap.add_argument("-c", "--contours", nargs='?', help="Fits file to use to overlay contours", type=str)
-ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='bpt_diagrams_2', type=str)
+ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='bpt_diagrams_v2', type=str)
 ap.add_argument("--bpt", nargs="?", help="BPT diagram. Default 1. (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))", default=1, type=int)
 args = ap.parse_args()
 
@@ -258,5 +255,5 @@ else :
     else :
         for i in range(3):
             if r_results[i+1]=='Done':
+                print('BPT graph '+str(i+1)+' can be plotted.')
                 bpt_single(r_names[i+1],r_names[0],args.regions,args.contours,outdir,i+1)
-            
