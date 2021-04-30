@@ -30,8 +30,10 @@ def ratio_maker(line_names,datatype,outdir):
     the datatypes can be any outputs of camel such as int, fux, wave,...
     if a single data type is given, it will be assumed for every ratio
     
-    The function eturns an array of length equal to the number of asked ratios, containing
-    'Done' if the ratio could be computed, and 'Unavailable' if it couldn't
+    The function returns :
+        -an array of length equal to the number of asked ratios, containing
+        'Done' if the ratio could be computed, and 'Unavailable' if it couldn't
+        -an array containing the newly created ratio file paths
     '''
     line_files=copy.deepcopy(line_names)
     ratio_results=np.array([None]*len(line_names))
