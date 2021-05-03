@@ -182,9 +182,12 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
     agnliner_curve = bpt_diagram.agnliner_crv(logx)
     starform_regions = np.where(logy < bpt_diagram.pure_starform_crv(logx))
     bpt_data[starform_regions] = starform_region.index
-
-    int_regions = np.where((logy > pure_starform) & (logx < int_curve) \
-                          & (logy>bpt_diagram.int_inter[0]) & (logy<bpt_diagram.int_inter[1]))
+    
+    if bptype==1:
+        int_regions = np.where((logy > pure_starform) & (logx < int_curve) \
+                              & (logy>bpt_diagram.int_inter[0]) & (logy<bpt_diagram.int_inter[1]))
+    else:
+         int_regions = np.where((logy > pure_starform) & (logx < int_curve))
     bpt_data[int_regions] = int_region.index
 
     agn_regions = np.where((logx > int_curve) & (logy>agnliner_curve))
@@ -270,7 +273,7 @@ else:
     sdir='/home/mparra/PARRA/Observ/Andres/optical/'
     os.chdir(sdir)
 
-    r_results,r_names=ratio_maker(bpt_lines,'flux',outdir)
+    r_results,r_names=ratio_maker(bpt_lines,'int',outdir)
 
     if r_results[0]=='Unavailable' or r_results[1]==r_results[2]==r_results[3]=='Unavailable':
         print("Can't compute the BPT, too many ratios missing.")
