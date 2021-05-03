@@ -241,7 +241,7 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
 
 
 # read arguments
-ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type (1, 2 or 3). The separation is based on Kewley et al. 2006')
+ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type. Separations based on Law et al. 2021')
 ap.add_argument("-r", "--regions", nargs='*', help="Region files to be overlaid on the image", default=None)
 ap.add_argument("-c", "--contours", nargs='?', help="Fits file to use to overlay contours", type=str)
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='bpt_diagrams_v2', type=str)
