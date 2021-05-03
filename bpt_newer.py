@@ -4,7 +4,6 @@
 # !/usr/bin/env python3
 
 '''
-
 This script automatically searches for the BPT line maps in the subdirectories of
 the starting directory, then computes the newest version of the BPT diagram from
 Law et al. 2021 (https://arxiv.org/abs/2011.06012)
