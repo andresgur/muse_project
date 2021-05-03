@@ -224,8 +224,16 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
 
     y_axis_map.writeto(outfile, overwrite=True)
     img = Image(outfile)
-    # colormap with identical order
-    cmp = ListedColormap([starform_region.color, int_region.color, agn_region.color, liner_region.color])
+    
+    # colormap with identical order, but only for non empty region
+    regionslist=[starform_regions,int_regions,agn_regions,liner_regions]
+    colorange=[starform_region.color,int_region.color,agn_region.color,liner_region.color]
+    colorlist=[]
+    for i in range(len(regionslist)):
+        if np.size(regionslist[i])!=0:
+            colorlist.append(colorange[i])
+    cmp=ListedColormap(colorlist)
+    
     plot_bpt_map(img, cmp, "%s/bpt%d_image.png" % (out, bptype), regs, conts)
 
     figure.savefig("%s/bpt_%d.png" % (out, bptype))
