@@ -20,18 +20,19 @@ Note : this code will automatically search for automatic bpt outputs from bpt_ne
 import sys, os
 sys.path.append('/home/mparra/PARRA/Scripts/Python/MUSE/')
 
-import os
 from astropy.io import fits
 import matplotlib.pyplot as plt
+from mpdaf.obj import Image
 import numpy as np
 import logging
 import argparse
-from mpdaf.obj import Image
-from line_utils import line_ratios, ratio_maker
+from line_utils import ratio_maker, map_plot
 
 ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type. Separatios based on Law et al. 2021')
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='H2_diags', type=str)
 ap.add_argument("-bpt", "--bptmap", nargs='?', help="BPT OIII/SII map file path", default=None, type=str)
+ap.add_argument("-r", "--regions", nargs='*', help="Region files to be overlaid on the image")
+ap.add_argument("-c", "--contours", nargs='?', help="Fits file to use to overlay contours", type=str)
 args = ap.parse_args()
 
 outdir=args.outdir
@@ -181,18 +182,13 @@ metal_file[0].data=metal_map
 
 metal_file.writeto('metal_map.fits',overwrite=True)
 
-metal_img=Image('metal_map.fits')
+metal_title='metal map computed with method '+case
 
-metal_fig=plt.figure(figsize=(10,8))
-   
-plt.suptitle('metal map computed with method '+case)
-metal_img.plot(zscale=True,colorbar='v')
+map_plot('metal_map.fits',title=metal_title,contours=args.contours,regions=args.regions)
+
 
 '''
-This part computes ionization parameter maps.
-There are three methods depending on the amount of lines available.
-Those computations are based on 4 line INTENSITY ratios.
-We search for those lines using ratio_maker.
+This part computes ionization parameter map.
 '''
 
 #defining the calibration function. Here, Z is the metallicity normalized to solar metallicity
@@ -216,10 +212,6 @@ ion_par_file[0].data=ion_par_map
 
 ion_par_file.writeto('ion_par.fits',overwrite=True)
 
-ion_par_img=Image('ion_par.fits')
+ion_title='ionization map computed with method' +case
 
-ion_par_fig=plt.figure(figsize=(10,8))
-
-plt.suptitle('ionization map computed with method' +case)
-ion_par_img.plot(zscale=True,colorbar='v')
-
+map_plot('ion_par.fits',title=ion_title,contours=args.contours,regions=args.regions)
