@@ -14,6 +14,8 @@ from astropy.io import fits
 from mpdaf.obj import Image
 import matplotlib.pyplot as plt
 import copy as copy
+from matplotlib.colors import ListedColormap
+import muse_utils as mu
 
 def ratio_maker(line_names,datatype,outdir):
     
@@ -134,14 +136,29 @@ def line_ratios(linemaps_numerator, linemaps_denominator,outdir,outname):
     ratio_fits.writeto(outdir + "/" + outname + ".fits", overwrite=True)
     #print('Line ratio %s/%s written to %s/%s.fits' % (added_maps_numerator, added_maps_denominator, outdir, outname))
     
-def map_plot(filename):    
+def map_plot(filename,contours=None,regions=None,title=None):    
     
-    if os.path.exists(filename):
+    image=Image(filename)
         
-        img=Image(filename)
-        img_figure, ax = plt.subplots(1, subplot_kw={'projection': img.wcs.wcs},figsize=(10,8))
+    img_figure, ax = plt.subplots(1, subplot_kw={'projection': image.wcs.wcs},figsize=(10,8))
+    
+    if title is not None:
+        img_figure.suptitle(title)
+    else:
+        img_figure.suptitle(filename)
+        
+    image.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False, zscale=False, extent=None)
+    ax.set_xlabel('Ra', labelpad=0)
+    ax.set_ylabel('Dec', labelpad=-2)
 
-        img.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False, zscale=True, colorbar='v',
-                    extent=None)
-        ax.set_xlabel('Ra', labelpad=0)
-        ax.set_ylabel('Dec', labelpad=-2)
+    if contours is not None:
+        ctrs = fits.open(contours)
+        min_data = np.nanpercentile(ctrs[0].data, 10)
+        max_data = np.nanpercentile(ctrs[0].data, 90)
+        levels = np.linspace(min_data, max_data, 4)
+        cmp = ListedColormap(["black"])
+        ax.contour(ctrs[0].data, levels=levels, alpha=0.6, origin="lower", cmap=cmp)
+
+    if regions is not None:
+        for region in regions:
+            mu.plot_regions(region, ax, image.data_header)
