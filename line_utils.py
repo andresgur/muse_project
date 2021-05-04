@@ -147,7 +147,7 @@ def map_plot(filename,contours=None,regions=None,title=None):
     else:
         img_figure.suptitle(filename)
         
-    image.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False, zscale=False, extent=None)
+    image.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False,extent=None,colorbar='v')
     ax.set_xlabel('Ra', labelpad=0)
     ax.set_ylabel('Dec', labelpad=-2)
 
