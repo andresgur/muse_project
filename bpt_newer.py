@@ -273,7 +273,7 @@ else:
     sdir='/home/mparra/PARRA/Observ/Andres/optical/'
     os.chdir(sdir)
 
-    r_results,r_names=ratio_maker(bpt_lines,'int',outdir)
+    r_results,r_names=ratio_maker(bpt_lines,'flux',outdir)
 
     if r_results[0]=='Unavailable' or r_results[1]==r_results[2]==r_results[3]=='Unavailable':
         print("Can't compute the BPT, too many ratios missing.")
