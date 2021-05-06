@@ -2,7 +2,7 @@
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 22-04-2021
+# @Last modified time: 06-05-2021
 
 
 
@@ -36,6 +36,7 @@ parser.add_argument("-r", "--region", help='Source region file', type=str, nargs
 parser.add_argument("-s", "--simdir", help='MARX simulation directory', type=str, nargs=1, required=True)
 parser.add_argument("-e", "--event_file", help='Chandra event file of the observation', type=str, nargs=1, required=True)
 parser.add_argument("-o", "--outdir", help='Output director', type=str, nargs="?", default="psf_comparison")
+parser.add_argument("-f", "--factor", help='Factor to which the PSF computation will be performed. f * the extent of the input region. (2 by default)', type=float, default=2)
 parser.add_argument("-c", "--core", help='Radius to which exclude the PSF core (in arcsec) for the flux normalization (useful in case of pile up see Lehmann et al. 2005)',
                     type=float, nargs="?", default=0)
 args = parser.parse_args()
@@ -57,10 +58,10 @@ bgregfile = args.background[0]
 nbins = args.bins
 
 #maximum annuli size ratio compared to the maximal dimension of the source region
-max_factor=2
+max_factor = args.factor
 
 #chandra pixel to arsec ratio
-pta=0.492
+pta = 0.492
 
 #radius affected by pile-up in the initial data in arsecs
 # rlim_pileup=1.2

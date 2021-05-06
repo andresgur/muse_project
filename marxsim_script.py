@@ -2,12 +2,13 @@
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 22-04-2021
+# @Last modified time: 06-05-2021
 
 
 
 #%% initialisation
 import os
+import numpy as np
 from astropy.io import fits
 from astropy.time import Time
 from astropy import units as u
@@ -44,11 +45,10 @@ More  details about the comparison at the end of the script
 '''
 
 ''' PARAMETERS '''
-parser = argparse.ArgumentParser(description='Parameters for the MARX simulattions.')
+parser = argparse.ArgumentParser(description='Parameters for the MARX simulattions. To be launched from the directory where all Chandra data is stored (e.g. repro dir)')
 parser.add_argument("--sao", help='Flag to use sao trace in the simulations (only when high degree of accuracy is needed, see https://cxc.harvard.edu/ciao/PSFs/raytracers.html)', action="store_true")
 parser.add_argument("-r", "--region", help='Source region file', type=str, nargs=1, required=True)
 parser.add_argument("-b", "--background", help='Background region file', type=str, nargs=1, required=True)
-parser.add_argument("-o", "--obsdir", help='Observation directory', type=str, nargs=1, required=True)
 parser.add_argument("-n", "--nsimulations", help='Number of MARX simulations to perform', type=int, nargs='?', default=500)
 args = parser.parse_args()
 #Saotrace ('yes'), Marx ('no'), or choice ('maybe')
@@ -59,7 +59,7 @@ nsim = args.nsimulations
 
 #starting dir
 #sdir='/home/mparra/PARRA/Observ/Andres/4748/repro/'
-sdir = args.obsdir[0]
+#sdir = args.obsdir[0]
 
 #starting region
 regfile = args.region[0]
@@ -67,7 +67,7 @@ regfile = args.region[0]
 #background region (will be used later)
 bgregfile = args.background[0]
 
-python_argument = "%s -n %d --background %s -r %s -o %s --sao %s" % (__file__, nsim, bgregfile, regfile, sdir, args.sao)
+python_argument = "%s -n %d --background %s -r %s --sao %s" % (__file__, nsim, bgregfile, regfile, args.sao)
 
 # chandra pixel to arsec ratio
 pta = 0.492
@@ -82,9 +82,21 @@ else:
     decis_int = 0
 
 #ditherfile, there should only be one ditherfile for an observation
-os.chdir("%s" % sdir)
+#os.chdir("%s" % sdir)
 
-ditherfile = glob.glob('./*_asol1.fits')[0]
+ditherfiles = glob.glob('./*_asol1.fits')
+if len(ditherfiles) > 1:
+    ditherfile = "full_asol.fits"
+    print("%d aspect solution files found. These files will be merged into a single aspect solution file named %s" % (len(ditherfiles), ditherfile))
+    # join them after sorting chronologically
+    ditherfile_string = ",".join(np.sort(ditherfiles))
+    # merge them into a single file https://cxc.cfa.harvard.edu/ciao/why/asol.html
+    os.system('dmmerge "%s" %s clobber=yes' % (ditherfile_string, ditherfile))
+
+else:
+    ditherfile = ditherfiles[0]
+# in case there are multiple dither files, merge them onto a single string (https://cxc.cfa.harvard.edu/ciao/why/asol.html)
+#ditherfile_string = "pcadf181476117N003_asol1.fits, pcadf181476245N003_asol1.fits"
 evt2 = glob.glob('./*_evt2.fits')[0]
 
 #reading the data file, which is assumed to have the same name as the region file
@@ -152,12 +164,13 @@ if instrum == 'ACIS':
     elif chip_id > 3:
         detector = 'ACIS-S'
         subsys = 'ACIS-S' + str(chip_id - 4)
+print("Detector used %s" % detector)
 
 if instrum == 'HRC':
     detector=input('Since the CCD number overlap in this instrument, please confirm'\
                    +' if the detecor used is HRC-I or HRC-S')
 
-os.system('asphist infile=%s outfile="marx.asp" evtfile=%s clobber=yes' % (ditherfile, evt2))
+os.system('asphist infile="%s" outfile="marx.asp" evtfile=%s clobber=yes' % (ditherfile, evt2))
 
 #here we only use mkarf to create the response file, a more accurate version can be computed with mkwarf
 #but is much more complex to create
@@ -168,6 +181,7 @@ os.system('mkarf detsubsys="'+subsys+'" grating="'+grating+'" outfile="marx.arf"
           +'" maskfile=NONE pbkfile=NONE dafile=NONE verbose=1 mode=h clobber=yes')
 
 #not done in the marx tutorial but should be done for a point source...right ?
+print("Creating ARF corrected file for point like source")
 os.system('arfcorr infile="'+evt2+'[sky=region('+regfile+')][bin sky]" region="region('+regfile+\
           ')" x='+ctr_x+' y='+ctr_y+' arf=marx.arf outfile=marx_corr.arf clobber=yes')
 
@@ -222,10 +236,10 @@ if sao_arg:
 
     fpar_sao=open('marx_sao_par.lua','w+')
     fpar_sao.write('ra_pnt='+ra_nom+'\ndec_pnt='+dec_nom+'\nroll_pnt='+roll_nom+'\n\n'\
-                  +'dither_asol_chandra{file="'+ditherfile+'", ra=ra_pnt, dec=dec_pnt, roll=roll_pnt}\n\n'
+                  +'dither_asol_chandra{file="%s", ra=ra_pnt, dec=dec_pnt, roll=roll_pnt}\n\n'
                   +'point{position={ra='+ctr_ra+', dec='+ctr_dec+',ra_aimpt=ra_pnt, dec_aimpt=dec_pnt,},\n'
                   +'spectrum={{file="marx_sao.rdb", units="photons/s/cm2", scale=1, format="rdb", emin="ENERG_LO",'
-                  +'emax="ENERG_HI",flux="FLUX"}}}')
+                  +'emax="ENERG_HI",flux="FLUX"}}}' %(ditherfile))
     fpar_sao.close()
 
     #sao not working as of now
@@ -245,6 +259,7 @@ if sao_arg:
               +' Roll_Nom='+roll_nom+' SourceRA='+source_ra+' SourceDEC='+source_dec+' Verbose=yes mode=h'
 
 else:
+    print("Running marx without sao trace")
     f_marx = open('marx_arg.tbl','w+')
 
     fluxdens = extract_data['NET_RATE']/(arf_data['SPECRESP'] * float(binning))
@@ -261,7 +276,7 @@ else:
     #marx parameters :
     #SourceFlux=-1 tells marx to take the integrated flux of the Spectrum
     #Verbose=yes to have diagnostic messages
-
+    # MARX only ACCEPTS 1 single dither file so we need to merge them
     par_marx='pset marx SpectrumType="FILE" SourceFlux=-1 SpectrumFile=marx_arg.tbl'\
               +' ExposureTime='+expos+' TStart='+date+' OutputDir=marx_sim GratingType='+grating\
               +' DetectorType="ACIS-S" RA_Nom='+ra_nom+' Dec_Nom='+dec_nom\
@@ -285,6 +300,7 @@ with open("%s/python_command.txt" % outdir, "w+") as f:
 os.system('mkdir -p ' + simdirs[decis_int])
 
 for i in range(1, nsim + 1):
+    print("Performing MARX simulation %d/%d" % (i, nsim + 1))
     os.system('marx')
 
     os.chdir(simdirs[decis_int])
