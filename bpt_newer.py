@@ -7,7 +7,6 @@
 This script automatically searches for the BPT line maps in the subdirectories of
 the starting directory, then computes the newest version of the BPT diagram from
 Law et al. 2021 (https://arxiv.org/abs/2011.06012)
-
 Arguments can be used to overlay contours, ds9 regions, change the output directory
 and manually specify the starting line ratio files instead of doing an automatic search
 
@@ -30,6 +29,8 @@ from matplotlib.colors import ListedColormap
 from line_utils import ratio_maker
 import bpt_config as bptcfg
 
+# sdir='/home/mparra/PARRA/Observ/Andres/optical/'
+sdir='/home/mparra/PARRA/Observ/NGC5917/MUSE/'
 
 class BPT_region:
     """Wrapper for the regions of the BPT diagram.
@@ -62,12 +63,15 @@ class BPT_diagram:
         self.index = index
 
         if self.index == 1:
+            self.pure_starform_max=-0.032
             self.agnliner_inter = (-0.24, 0.5)
             self.int_inter = (-0.61, 1)
         elif self.index == 2:
+            self.pure_starform_max=0.198
             self.agnliner_inter = (-0.22, 0.3)
-            self.int_inter = (-1.1, 1)
+            self.int_inter = (-1.1, 1.1)
         elif self.index == 3:
+            self.pure_starform_max=-0.36
             self.agnliner_inter = (-0.9, 0.3)
             self.int_inter = (-0.25, 0.65)
 
@@ -112,7 +116,7 @@ def plot_bpt_map(image, colormap=ListedColormap(["blue", "green","pink","orange"
     contours: str
         Path to fits file to overlay contours on the BPT diagrams
     """
-    img_figure, ax = plt.subplots(1, subplot_kw={'projection': image.wcs.wcs})
+    img_figure, ax = plt.subplots(1, subplot_kw={'projection': image.wcs.wcs},figsize=(10,8))
     # do not draw the colorbar colorbar=None
     # extent = left, right, bottom, top
     image.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False, zscale=False, cmap=colormap, colorbar=None,
@@ -148,7 +152,7 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
     # 0 for composite or LINER
     bpt_data = np.zeros(y_axis_map[0].data.shape)
 
-    figure, ax = plt.subplots(1)
+    figure, ax = plt.subplots(1,figsize=(10,8))
 
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
     out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.05
@@ -183,17 +187,18 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
     pure_starform = bpt_diagram.pure_starform_crv(logx)
     int_curve = bpt_diagram.int_crv(logy)
     agnliner_curve = bpt_diagram.agnliner_crv(logx)
-    starform_regions = np.where(logy < bpt_diagram.pure_starform_crv(logx))
+    starform_regions = np.where(( logy < bpt_diagram.pure_starform_crv(logx)) &\
+                                ( logx < bpt_diagram.pure_starform_max))
     bpt_data[starform_regions] = starform_region.index
-    
-    if bptype==1:
-        int_regions = np.where((logy > pure_starform) & (logx < int_curve) \
-                              & (logy>bpt_diagram.int_inter[0]) & (logy<bpt_diagram.int_inter[1]))
-    else:
-         int_regions = np.where((logy > pure_starform) & (logx < int_curve))
+
+    int_regions = np.where((logy > pure_starform) & (logx < int_curve) & (logx < bpt_diagram.pure_starform_max))
+    int_regions=np.concatenate((int_regions,np.where((logx < int_curve) &\
+                                                     (logx > bpt_diagram.pure_starform_max))),axis=1)
+    int_regions=(np.array(int_regions[0]),np.array(int_regions[1]))
     bpt_data[int_regions] = int_region.index
 
     agn_regions = np.where((logx > int_curve) & (logy>agnliner_curve))
+    
     bpt_data[agn_regions] = agn_region.index
 
     liner_regions=np.where((logx>int_curve) & (logy<agnliner_curve))
@@ -203,6 +208,7 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
 
     #plotting the separations
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
+    inter_starform=inter_starform[inter_starform<bpt_diagram.pure_starform_max]
     ax.plot(inter_starform, bpt_diagram.pure_starform_crv(inter_starform), color="black", zorder=100)
 
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
@@ -218,25 +224,28 @@ def bpt_single(map_1, map_2, regs, conts, out, bptype):
     #ploting the regions
     for region in regions:
         ax.plot(logx[bpt_data == region.index], logy[bpt_data == region.index],\
-                color=region.color, ls="None", marker=".", label=region.name)
+                color=region.color, ls="None", marker="+", label=region.name)
     ax.legend()
 
     y_axis_map[0].data = bpt_data
-    if y_axis_map[0].header["WCSAXES"] == 3:
-        y_axis_map[0].header["WCSAXES"] = 2
+
+    if 'WCSAXES' in y_axis_map[0].header:
+        if y_axis_map[0].header["WCSAXES"] == 3:
+            y_axis_map[0].header["WCSAXES"] = 2
+            
     y_axis_map[0].header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
     outfile = "%s/BPT_%d.fits" % (out, bptype)
 
     y_axis_map.writeto(outfile, overwrite=True)
     img = Image(outfile)
-    
-    # colormap with identical order, but only for non empty region
+    # colormap with identical order
     regionslist=[starform_regions,int_regions,agn_regions,liner_regions]
     colorange=[starform_region.color,int_region.color,agn_region.color,liner_region.color]
     colorlist=[]
     for i in range(len(regionslist)):
         if np.size(regionslist[i])!=0:
             colorlist.append(colorange[i])
+    #colormap with identical order, but only for non empty regions
     cmp=ListedColormap(colorlist)
     
     plot_bpt_map(img, cmp, "%s/bpt%d_image.png" % (out, bptype), regs, conts)
@@ -269,18 +278,23 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
 
     bpt_diagram = BPT_diagram(bptype)
 
+
     #defining each region
     pure_starform = bpt_diagram.pure_starform_crv(logx)
     int_curve = bpt_diagram.int_crv(logy)
     agnliner_curve = bpt_diagram.agnliner_crv(logx)
-    starform_regions = np.where(logy < bpt_diagram.pure_starform_crv(logx))
+    starform_regions = np.where(( logy < bpt_diagram.pure_starform_crv(logx)) &\
+                                ( logx < bpt_diagram.pure_starform_max))
     bpt_data[starform_regions] = starform_region.index
 
-    int_regions = np.where((logy > pure_starform) & (logx < int_curve))
-         
+    int_regions = np.where((logy > pure_starform) & (logx < int_curve) & (logx < bpt_diagram.pure_starform_max))
+    int_regions=np.concatenate((int_regions,np.where((logx < int_curve) &\
+                                                     (logx > bpt_diagram.pure_starform_max))),axis=1)
+    int_regions=(np.array(int_regions[0]),np.array(int_regions[1]))
     bpt_data[int_regions] = int_region.index
 
     agn_regions = np.where((logx > int_curve) & (logy>agnliner_curve))
+    
     bpt_data[agn_regions] = agn_region.index
 
     liner_regions=np.where((logx>int_curve) & (logy<agnliner_curve))
@@ -290,7 +304,8 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
 
     #computing the separations
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
-
+    inter_starform=inter_starform[inter_starform<bpt_diagram.pure_starform_max]
+    
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
     inter_def = np.sort(inter_def[inter_def< bpt_diagram.int_inter[1]])
 
@@ -414,9 +429,10 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
         outfile_png = "%s/BPT_%d_geo_%d.png" % (out, bptype,i)
         
         figure_geo[i].savefig(outfile_png, format="png", bbox_inches="tight", pad_inches=0.4)
-
+        
+    
 # read arguments
-ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type. Separations based on Law et al. 2021')
+ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type (1, 2 or 3). The separation is based on Kewley et al. 2006')
 ap.add_argument("-r", "--regions", nargs='*', help="Region files to be overlaid on the image", default=None)
 ap.add_argument("-c", "--contours", nargs='?', help="Fits file to use to overlay contours", type=str)
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='bpt_diagrams_v2', type=str)
@@ -441,10 +457,9 @@ if args.config:
 
         bpt_single(ratiomap, bptcfg.lineratio_paths["o3_hb"], args.regions, args.contours, outdir, i)
         bpt_geometry(ratiomap,bptcfg.lineratio_paths["o3_hb"], outdir, i,args.regions, args.contours)
-
 else:
-    print("Running in maxime noob mode let's goooo")
-    sdir='/home/mparra/PARRA/Observ/Andres/optical/'
+    print("Running in auto mode.")
+    
     os.chdir(sdir)
 
     r_results,r_names=ratio_maker(bpt_lines,'flux',outdir)
