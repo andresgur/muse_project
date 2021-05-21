@@ -2,7 +2,7 @@
 # @Date:   19-10-2020
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 26-04-2021
+# @Last modified time: 21-05-2021
 
 import os
 from regions import read_ds9
@@ -11,9 +11,10 @@ from astropy.io import fits
 import argparse
 from numpy import log10, sqrt
 import astropy.units as u
+from astropy.wcs import WCS
 
 
-def region_to_aperture(region):
+def region_to_aperture(region, wcs=None):
     """Convert region object to aperture object."""
 
     region_type = type(region).__name__
@@ -27,15 +28,18 @@ def region_to_aperture(region):
             # to be tested
             return EllipticalAperture(source_center, a=region.width, b=region.height, angle=region.angle)
     elif "Sky" in region_type:
+        if wcs is None:
+            print("Error, cannot obtain aperture without a wcs.")
+            return None
         center = region.center.fk5
         if region_type == "CircleSkyRegion":
-            return SkyCircularAperture(center, r=region.radius)
+            return SkyCircularAperture(center, r=region.radius).to_sky(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
             print("Region %s not implemented")
         elif region_type == "EllipseSkyRegion":
-            return SkyEllipticalAperture(center, a=region.width, b=region.height, angle=region.angle)
+            return SkyEllipticalAperture(center, a=region.width, b=region.height, angle=region.angle).to_sky(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
-            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius)
+            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_sky(wcs)
     else:
         print("Error region not implemented")
         return None
@@ -49,8 +53,7 @@ args = parser.parse_args()
 regions = read_ds9(args.regions[0])
 source_reg = regions[0]
 bkg_reg = regions[1]
-source_aperture = region_to_aperture(source_reg)
-bkg_aperture = region_to_aperture(bkg_reg)
+
 for image_file in args.images:
 
     if os.path.isfile(image_file):
@@ -81,6 +84,9 @@ for image_file in args.images:
         print("PHOTFLAM keyword value: %.2E %s" % (photflam.value, photflam.unit))
         zero_point = float(hst_hdul[1].header["PHOTZPT"])
         image_data = hst_hdul[1].data
+        wcs = WCS(hst_hdul[1].header)
+        source_aperture = region_to_aperture(source_reg, wcs)
+        bkg_aperture = region_to_aperture(bkg_reg, wcs)
         phot_source = aperture_photometry(image_data, source_aperture)
         phot_bkg = aperture_photometry(image_data, bkg_aperture)
 
