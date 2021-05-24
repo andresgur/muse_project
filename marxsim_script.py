@@ -207,8 +207,8 @@ arf_data = arf_corr[1].data
 extract = fits.open('marx_extract.spec')
 extract_data = extract[1].data
 
-# obtaining the background exposure
-expos = str(round(extract_data['BG_EXPOSURE'][0], 1))
+# obtaining the exposure time
+expos = str(round(extract_data['EXPOSURE'][0], 1))
 
 '''
 Now we create the spectrum file which will serve as an argument for marx/sao
@@ -253,7 +253,7 @@ if sao_arg:
 
     par_marx='pset marx SourceType="SAOSAC" SourceFlux=-1 SAOSACFile=saotrace.fits'\
               +' ExposureTime='+expos+' TStart='+date+' OutputDir=sao_sim GratingType='+grating\
-              +' DetectorType="ACIS-S" RA_Nom='+ra_nom+' Dec_Nom='+dec_nom\
+              +' DetectorType=' + detector + ' RA_Nom='+ra_nom+' Dec_Nom='+dec_nom\
               +' DitherModel="FILE" DitherFile='+ditherfile\
               +' Roll_Nom='+roll_nom+' SourceRA='+source_ra+' SourceDEC='+source_dec+' Verbose=yes mode=h'
 
@@ -278,7 +278,7 @@ else:
     # MARX only ACCEPTS 1 single dither file so we need to merge them
     par_marx='pset marx SpectrumType="FILE" SourceFlux=-1 SpectrumFile=marx_arg.tbl'\
               +' ExposureTime='+expos+' TStart='+date+' OutputDir=marx_sim GratingType='+grating\
-              +' DetectorType="ACIS-S" RA_Nom='+ra_nom+' Dec_Nom='+dec_nom\
+              +' DetectorType=' + detector +'  RA_Nom='+ra_nom+' Dec_Nom='+dec_nom\
               +' DitherModel="FILE" DitherFile='+ditherfile\
               +' Roll_Nom='+roll_nom+' SourceRA='+source_ra+' SourceDEC='+source_dec+' Verbose=yes mode=h'
 
