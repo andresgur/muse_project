@@ -199,8 +199,7 @@ os.system('dmtcalc "'+evt2+'[EVENTS][sky=region('+bgregfile+')]" marx_bg_energy.
           +' expr="energy=(float)pi*0.0149" clobber=yes')
 
 #net histogram computation with real energy binning
-os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:%.1f]"'\
-          +' bkg="marx_bg_energy.fits" outfile=marx_extract.spec clobber=yes opt=generic' % binning)
+os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:%.1f]" bkg=marx_bg_energy.fits outfile=marx_extract.spec clobber=yes opt=generic' % binning)
 
 # reading the newly created files
 arf_corr = fits.open('marx_corr.arf')
