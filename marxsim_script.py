@@ -208,7 +208,7 @@ extract = fits.open('marx_extract.spec')
 extract_data = extract[1].data
 
 # obtaining the exposure time
-expos = str(round(extract_data['EXPOSURE'][0], 1))
+expos = str(round(extract_data['EXPOSURE_BG'][0], 1))
 
 '''
 Now we create the spectrum file which will serve as an argument for marx/sao
