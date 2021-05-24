@@ -2,7 +2,7 @@
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 06-05-2021
+# @Last modified time: 24-05-2021
 
 
 
@@ -51,7 +51,6 @@ parser.add_argument("-r", "--region", help='Source region file', type=str, nargs
 parser.add_argument("-b", "--background", help='Background region file', type=str, nargs=1, required=True)
 parser.add_argument("-n", "--nsimulations", help='Number of MARX simulations to perform', type=int, nargs='?', default=500)
 args = parser.parse_args()
-#Saotrace ('yes'), Marx ('no'), or choice ('maybe')
 sao_arg = args.sao
 
 # number of simulations
@@ -61,25 +60,27 @@ nsim = args.nsimulations
 #sdir='/home/mparra/PARRA/Observ/Andres/4748/repro/'
 #sdir = args.obsdir[0]
 
-#starting region
+# input region
 regfile = args.region[0]
 
-#background region (will be used later)
+# background region
 bgregfile = args.background[0]
 
 python_argument = "%s -n %d --background %s -r %s --sao %s" % (__file__, nsim, bgregfile, regfile, args.sao)
 
-# chandra pixel to arsec ratio
+# chandra ACIS pixel to arsec ratio
 pta = 0.492
 
 '''############'''
 
 if sao_arg:
-    decis_int = 1
+    simdir = 'sao_sim'
+    fitsname = 'saosim_'
     outdir = "sao_outs"
 else:
+    simdir = 'marx_sim'
+    fitsname = "marxsim_"
     outdir = "marx_outs"
-    decis_int = 0
 
 #ditherfile, there should only be one ditherfile for an observation
 #os.chdir("%s" % sdir)
@@ -175,10 +176,9 @@ os.system('asphist infile="%s" outfile="marx.asp" evtfile=%s clobber=yes' % (dit
 #here we only use mkarf to create the response file, a more accurate version can be computed with mkwarf
 #but is much more complex to create
 
-binning = "0.1"
+binning = 0.1
 os.system('mkarf detsubsys="'+subsys+'" grating="'+grating+'" outfile="marx.arf" obsfile="'+evt2\
-          +'" asphistfile="marx.asp" sourcepixelx='+ctr_x+' sourcepixely='+ctr_y+' engrid="0.3:10.0:'+binning
-          +'" maskfile=NONE pbkfile=NONE dafile=NONE verbose=1 mode=h clobber=yes')
+          +'" asphistfile="marx.asp" sourcepixelx='+ctr_x+' sourcepixely='+ctr_y+' engrid="0.3:10.0:%.1f" maskfile=NONE pbkfile=NONE dafile=NONE verbose=1 mode=h clobber=yes' % binning)
 
 #not done in the marx tutorial but should be done for a point source...right ?
 print("Creating ARF corrected file for point like source")
@@ -199,16 +199,16 @@ os.system('dmtcalc "'+evt2+'[EVENTS][sky=region('+bgregfile+')]" marx_bg_energy.
           +' expr="energy=(float)pi*0.0149" clobber=yes')
 
 #net histogram computation with real energy binning
-os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:'+binning+']"'\
-          +' bkg="marx_bg_energy.fits" outfile=marx_extract.spec clobber=yes opt=generic')
+os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:%.1f]"'\
+          +' bkg="marx_bg_energy.fits" outfile=marx_extract.spec clobber=yes opt=generic' % binning)
 
-#reading the newly created files
+# reading the newly created files
 arf_corr = fits.open('marx_corr.arf')
 arf_data = arf_corr[1].data
 extract = fits.open('marx_extract.spec')
 extract_data = extract[1].data
 
-#obtaining the background exposure
+# obtaining the background exposure
 expos = str(round(extract_data['BG_EXPOSURE'][0], 1))
 
 '''
@@ -239,7 +239,7 @@ if sao_arg:
                   +'dither_asol_chandra{file="%s", ra=ra_pnt, dec=dec_pnt, roll=roll_pnt}\n\n'
                   +'point{position={ra='+ctr_ra+', dec='+ctr_dec+',ra_aimpt=ra_pnt, dec_aimpt=dec_pnt,},\n'
                   +'spectrum={{file="marx_sao.rdb", units="photons/s/cm2", scale=1, format="rdb", emin="ENERG_LO",'
-                  +'emax="ENERG_HI",flux="FLUX"}}}' %(ditherfile))
+                  +'emax="ENERG_HI",flux="FLUX"}}}' % (ditherfile))
     fpar_sao.close()
 
     #sao not working as of now
@@ -260,9 +260,9 @@ if sao_arg:
 
 else:
     print("Running marx without sao trace")
-    f_marx = open('marx_arg.tbl','w+')
+    f_marx = open('marx_arg.tbl', 'w+')
 
-    fluxdens = extract_data['NET_RATE']/(arf_data['SPECRESP'] * float(binning))
+    fluxdens = extract_data['NET_RATE'] / (arf_data['SPECRESP'] * binning)
 
     f_marx.write('#argument file for larx, manually created from marx_extract.spec and marx_corr.arf\n')
     for i in range(len(fluxdens)):
@@ -289,22 +289,18 @@ os.system(par_marx)
 #os.chdir(sdir)
 
 
-#temporary outputs directory, will be deleted
-simdirs=['marx_sim','sao_sim']
-
-fitsname=['marxsim_','saosim_']
-
+# temporary outputs directory, will be deleted
 os.system('mkdir -p ' + outdir)
 with open("%s/python_command.txt" % outdir, "w+") as f:
     f.write(python_argument)
-os.system('mkdir -p ' + simdirs[decis_int])
+os.system('mkdir -p ' + simdir)
 
 for i in range(1, nsim + 1):
     print("Performing MARX simulation %d/%d" % (i, nsim + 1))
     os.system('marx')
 
-    os.chdir(simdirs[decis_int])
-    curr_fitsname = fitsname[decis_int]+str(i)+'.fits'
+    os.chdir(simdir)
+    curr_fitsname = '%s%d.fits' % (fitsname, i)
 
     # running a pileup command to emulate the loss of counts due to pileup
     os.system('marxpileup MarxOutputDir="./"')
@@ -317,13 +313,13 @@ for i in range(1, nsim + 1):
     os.chdir('../..')
 
 #deleting all the temporary files
-os.chdir(simdirs[decis_int] + '/pileup')
+os.chdir(simdir + '/pileup')
 os.system('rm *')
 os.chdir('..')
 os.system('rmdir pileup')
 os.system('rm *')
 os.chdir('..')
-os.system('rmdir ' + simdirs[decis_int])
+os.system('rmdir ' + simdir)
 
 #moving the initialisation files
 os.system('mv *marx* ' + outdir)
