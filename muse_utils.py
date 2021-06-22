@@ -1,16 +1,9 @@
 # @Author: Andrés Gúrpide <agurpide>
-# @Date:   29-08-2019
+# @Date:   04-04-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
 # @Last modified time: 22-06-2021
 
-
-
-# -*- coding: utf-8 -*-
-# Methods to read config line files
-# Author: Andres Gurpide Lasheras  andres.gurpide@gmail.com
-# 04-04-2019
-# !/usr/bin/env python3
 
 # imports
 import matplotlib.pyplot as plt
