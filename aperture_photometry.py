@@ -24,7 +24,6 @@ def region_to_aperture(region, wcs=None):
     wcs: astropy.wcs.WCS
         A world coordinate system if the region in sky coordinates IS needed to convert it to pixels.
     """
-
     region_type = type(region).__name__
     if "Pixel" in region_type:
         source_center = (region.center.x, region.center.y)
@@ -34,20 +33,20 @@ def region_to_aperture(region, wcs=None):
             return CircularAnnulus(source_center, r_in=region.inner_radius, r_out=region.outer_radius)
         elif region_type == "EllipsePixelRegion":
             # to be tested
-            return EllipticalAperture(source_center, a=region.width, b=region.height, angle=region.angle)
+            return EllipticalAperture(source_center, a=region.width, b=region.height, theta=region.angle)
     elif "Sky" in region_type:
         if wcs is None:
             print("Error, cannot obtain aperture without a wcs.")
             return None
         center = region.center.fk5
         if region_type == "CircleSkyRegion":
-            return SkyCircularAperture(center, r=region.radius).to_sky(wcs)
+            return SkyCircularAperture(center, r=region.radius).to_pixel(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
             print("Region %s not implemented")
         elif region_type == "EllipseSkyRegion":
-            return SkyEllipticalAperture(center, a=region.width, b=region.height, angle=region.angle).to_sky(wcs)
+            return SkyEllipticalAperture(center, a=region.width, b=region.height, theta=region.angle).to_pixel(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
-            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_sky(wcs)
+            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_pixel(wcs)
     else:
         print("Error region not implemented")
         return None
