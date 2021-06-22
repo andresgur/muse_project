@@ -2,7 +2,7 @@
 # @Date:   19-10-2020
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 21-05-2021
+# @Last modified time: 22-06-2021
 
 import os
 from regions import read_ds9
@@ -15,7 +15,15 @@ from astropy.wcs import WCS
 
 
 def region_to_aperture(region, wcs=None):
-    """Convert region object to aperture object."""
+    """Convert region object to photutils.aperture.aperture_photometry object. The wcs object is needed only if the input regions are in sky coordinates.
+
+    Parameters
+    ----------
+    region: regions.Region
+        Output of read_ds9 method
+    wcs: astropy.wcs.WCS
+        A world coordinate system if the region in sky coordinates IS needed to convert it to pixels.
+    """
 
     region_type = type(region).__name__
     if "Pixel" in region_type:
