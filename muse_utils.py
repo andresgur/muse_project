@@ -2,7 +2,7 @@
 # @Date:   29-08-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 14-04-2021
+# @Last modified time: 22-06-2021
 
 
 
@@ -18,11 +18,52 @@ import numpy as np
 import os
 from regions import read_ds9
 from mpdaf.obj import Image
+from photutils.aperture import CircularAperture, CircularAnnulus, EllipticalAperture, SkyCircularAperture, SkyCircularAnnulus, SkyEllipticalAperture
 import pyregion
 import astropy.units as u
 from collections import OrderedDict
 import sys
 from astropy.io import fits
+
+
+def region_to_aperture(region, wcs=None):
+    """Convert region object to photutils.aperture.aperture_photometry object. The wcs object is needed only if the input regions are in sky coordinates.
+
+    Parameters
+    ----------
+    region: regions.Region
+        Output of read_ds9 method
+    wcs: astropy.wcs.WCS
+        A world coordinate system if the region in sky coordinates IS needed to convert it to pixels.
+    """
+
+    region_type = type(region).__name__
+    if "Pixel" in region_type:
+        source_center = (region.center.x, region.center.y)
+        if region_type == 'CirclePixelRegion':
+            return CircularAperture(source_center, r=region.radius)
+        elif region_type == "CircleAnnulusPixelRegion":
+            return CircularAnnulus(source_center, r_in=region.inner_radius, r_out=region.outer_radius)
+        elif region_type == "EllipsePixelRegion":
+            # to be tested
+            return EllipticalAperture(source_center, a=region.width, b=region.height, angle=region.angle)
+    elif "Sky" in region_type:
+        if wcs is None:
+            print("Error, cannot obtain aperture without a wcs.")
+            return None
+        center = region.center.fk5
+        if region_type == "CircleSkyRegion":
+            return SkyCircularAperture(center, r=region.radius).to_sky(wcs)
+        elif region_type == "CircleAnnulusSkyRegion":
+            print("Region %s not implemented")
+        elif region_type == "EllipseSkyRegion":
+            return SkyEllipticalAperture(center, a=region.width, b=region.height, angle=region.angle).to_sky(wcs)
+        elif region_type == "CircleAnnulusSkyRegion":
+            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_sky(wcs)
+    else:
+        print("Error region not implemented")
+        return None
+
 
 
 def read_psf_fits(fits_file, extension=1):
@@ -253,6 +294,7 @@ def plot_regions(region_file, ax, fits_header=None):
         regs = pyregion.parse(reg_string).as_imagecoord(fits_header)
         print(regs)
         patch_list, artist_list = regs.get_mpl_patches_texts()
+
         for p in patch_list:
             ax.add_patch(p)
 
@@ -268,6 +310,24 @@ def format_axis(ax, labelsize=17):
     ax.tick_params(which='minor', length=5)
 
 
+def create_linestyle_array(data_length):
+    """Create an array of colors given the length of a dataset. Useful for plots where a unique color is needed for each dataset.
+
+    The returned colors come from the jet map.
+
+    Parameters
+    ----------
+    data_length : The length of your data for the color array creation.
+
+    """
+    print("Creating linestyle array for %i datasets" % data_length)
+    m = np.array(['solid', 'dotted', 'dashed', 'dashdot'])
+
+    while data_length > len(m):
+        m = np.concatenate((m, m))
+    return m
+
+
 def create_color_array(data_length, cmap='jet'):
     """Create an array of colors given the length of a dataset. Useful for plots where a unique color is needed for each dataset.
 
@@ -279,11 +339,9 @@ def create_color_array(data_length, cmap='jet'):
 
     """
     print("Creating color array for %i datasets" % data_length)
-    x = np.arange(data_length)
-    ys = [i + x + (i * x)**2 for i in range(data_length)]
     setmap = plt.get_cmap(name=cmap)
 
-    colors = setmap(np.linspace(0, 1, len(ys)))
+    colors = setmap(np.linspace(0, 1, data_length))
     return colors
 
 
