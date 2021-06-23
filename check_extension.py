@@ -2,7 +2,7 @@
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 06-05-2021
+# @Last modified time: 23-06-2021
 
 
 
@@ -18,6 +18,23 @@ import matplotlib.pyplot as plt
 import glob
 import argparse
 from scipy.stats import ks_2samp
+
+
+def write_annuli(ctr_coord, radii):
+
+    out_reg = '# Region file format: DS9 version 4.1\n'\
+        + '#global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1'\
+        + ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1\nfk5\n'
+
+    out_reg += 'annulus(%d:%d:%.4f,%d:%d:%.4f,' % (ctr_coord.ra.hms[0], ctr_coord.ra.hms[1],
+                        ctr_coord.ra.hms[2], ctr_coord.dec.dms[0], np.abs(ctr_coord.dec.dms[1]), np.abs(ctr_coord.dec.dms[2]))
+
+    for radius in radii[1:-1]:
+        out_reg += '%.3f",' % radius
+    out_reg += '%.3f")' % radii[-1]
+    f_reg = open('annuli.reg', 'w+')
+    f_reg.write(out_reg)
+    f_reg.close()
 
 #marx needs to be installed (https://space.mit.edu/cxc/marx/)
 #saotrace needs to be installed (https://cxc.harvard.edu/cal/Hrma/Raytrace/SAOTrace.html)
@@ -70,7 +87,7 @@ rlim_pileup = args.core
 #reading the event file to get some more parameters
 evt2 = args.event_file[0]
 
-python_argument = "%s -b %d --background %s -r %s -e %s -s %s -c %.2f" % (__file__, nbins, bgregfile, regfile, evt2, simdir, rlim_pileup)
+python_argument = "%s -b %d --background %s -r %s -e %s -s %s -c %.2f -f %.2f" % (__file__, nbins, bgregfile, regfile, evt2, simdir, rlim_pileup, args.factor)
 
 #reading the region file
 source_reg = read_ds9(regfile)[0]
@@ -159,7 +176,7 @@ f_bg_marx = open('%s/marx_bg.reg' % outdir, 'w+')
 f_bg_marx.write(bgreg_line[:bgreg_line.find('#')])
 f_bg_marx.close()
 
-print("Extracting radial profile of the source")
+print("Extracting radial profile of the source up to %.2f %s" % (maxsize.value, maxsize.unit))
 
 #string used in the command line
 str_annulus='[bin sky=annulus(' + str(ctr_x)+',' + str(ctr_y)+',0:'\
@@ -198,29 +215,7 @@ with fits.open('%s/curr_profile.fits' % outdir) as curr_profile:
 
 radii = np.linspace(0, maxsize, num=nbins + 1)
 
-ra_tuple = (int(ctr_coord.ra.hms[0]), int(ctr_coord.ra.hms[1]), str(round(ctr_coord.ra.hms[2], 4)))
-dec_tuple = (int(ctr_coord.dec.dms[0]), abs(int(ctr_coord.dec.dms[1])), str(abs(round(ctr_coord.dec.dms[2], 4))))
-
-dec_init_tuple = (int(ctr_coord.dec.dms[0]), int(abs(ctr_coord.dec.dms[1])), \
-                str(abs(round(ctr_coord.dec.dms[2], 4))), str(round(radii[1].value, 4)))
-
-f_reg = open('annuli.reg', 'w+')
-
-f_reg.write(
-'# Region file format: DS9 version 4.1\n'\
-+'#global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1'\
-+' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1\nfk5\n')
-
-for i in range(nbins):
-
-    if i == 0:
-        curr_tuple = ra_tuple + dec_init_tuple
-        f_reg.write('circle(%i:%i:%s,%i:%i:%s,%s")\n' % curr_tuple)
-    else:
-        curr_tuple = ra_tuple + dec_tuple + (str(round(radii[i].value, 4)), str(round(radii[i + 1].value, 4)))
-        f_reg.write('annulus(%i:%i:%s,%i:%i:%s,%s",%s")\n' % curr_tuple)
-
-f_reg.close()
+write_annuli(ctr_coord, radii.value)
 
 os.system('punlearn dmextract')
 
