@@ -27,7 +27,7 @@ def write_annuli(ctr_coord, radii):
         + ' highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1\nfk5\n'
 
     out_reg += 'annulus(%d:%d:%.4f,%d:%d:%.4f,' % (ctr_coord.ra.hms[0], ctr_coord.ra.hms[1],
-                        ctr_coord.ra.hms[2], ctr_coord.dec.dms[0], np.abs(ctr_coord.dec.dms[1]), np.abs(ctr_coord.dec.dms[2]))
+                      ctr_coord.ra.hms[2], ctr_coord.dec.dms[0], np.abs(ctr_coord.dec.dms[1]), np.abs(ctr_coord.dec.dms[2]))
 
     for radius in radii[1:-1]:
         out_reg += '%.3f",' % radius
@@ -46,9 +46,9 @@ def write_annuli(ctr_coord, radii):
 #replace one (but not all) of your perl libraries environment variables.
 #You can manually setup the other variables in your saotrace starting script
 
-parser = argparse.ArgumentParser(description='Parameters to check extension of a give point like source.')
+parser = argparse.ArgumentParser(description='Check if a point like source is extended by comparing the data with PSF simulations.')
 parser.add_argument("-b", "--bins", type=int, help='Number of radial bins for the PSF/data comparison', default=10, nargs='?')
-parser.add_argument("--background", help='Background region file', type=str, nargs=1, required=True)
+parser.add_argument("--background", help='Background region file', type=str, nargs=1, required=False)
 parser.add_argument("-r", "--region", help='Source region file', type=str, nargs=1, required=True)
 parser.add_argument("-s", "--simdir", help='MARX simulation directory', type=str, nargs=1, required=True)
 parser.add_argument("-e", "--event_file", help='Chandra event file of the observation', type=str, nargs=1, required=True)
@@ -68,9 +68,6 @@ simdir = args.simdir[0]
 
 outdir = args.outdir
 
-#background region (will be used later)
-bgregfile = args.background[0]
-
 #number of annuli
 nbins = args.bins
 
@@ -86,6 +83,11 @@ rlim_pileup = args.core
 
 #reading the event file to get some more parameters
 evt2 = args.event_file[0]
+if args.background is not None:
+    #background region (will be used later)
+    bgregfile = args.background[0]
+else:
+    bgregfile = "None"
 
 python_argument = "%s -b %d --background %s -r %s -e %s -s %s -c %.2f -f %.2f" % (__file__, nbins, bgregfile, regfile, evt2, simdir, rlim_pileup, args.factor)
 
@@ -162,19 +164,6 @@ step = maxsize_pixel / nbins
 #however, chandra can't read directly the background file in our case so we rewrite it in an
 #acceptable format
 
-f_bg = open(bgregfile, 'r')
-bg_lines = f_bg.readlines()
-
-#sometimes ds9 doesn't bother including the format (fk5 for example) when saving regions, so we test
-#the length of the third line. If it's long, it's probably the region line instead of a format
-if len(bg_lines[2]) < 20:
-    bgreg_line = bg_lines[3]
-else:
-    bgreg_line = bg_lines[2]
-
-f_bg_marx = open('%s/marx_bg.reg' % outdir, 'w+')
-f_bg_marx.write(bgreg_line[:bgreg_line.find('#')])
-f_bg_marx.close()
 
 print("Extracting radial profile of the source up to %.2f %s" % (maxsize.value, maxsize.unit))
 
@@ -184,8 +173,27 @@ str_annulus='[bin sky=annulus(' + str(ctr_x)+',' + str(ctr_y)+',0:'\
 
 #With this we can extract the entire concentric annuli in one go
 # outfile="' + outdir + '/data_profile.fits" did not work so we create it here and move it
-os.system('dmextract "' + evt2+str_annulus + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"' \
+
+if args.background is not None:
+    f_bg = open(bgregfile, 'r')
+    bg_lines = f_bg.readlines()
+
+    #sometimes ds9 doesn't bother including the format (fk5 for example) when saving regions, so we test
+    #the length of the third line. If it's long, it's probably the region line instead of a format
+    if len(bg_lines[2]) < 20:
+        bgreg_line = bg_lines[3]
+    else:
+        bgreg_line = bg_lines[2]
+
+    f_bg_marx = open('%s/marx_bg.reg' % outdir, 'w+')
+    f_bg_marx.write(bgreg_line[:bgreg_line.find('#')])
+    f_bg_marx.close()
+    print("Extracting source brightness profile WITH background subtraction.")
+    os.system('dmextract "' + evt2 + str_annulus + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"' \
          + ' outfile="' + outdir + '/data_profile.fits" opt=generic clobber=yes')
+else:
+    print("Extracting source brightness profile WITHOUT background subtraction.")
+    os.system('dmextract "' + evt2 + str_annulus + '" outfile="' + outdir + '/data_profile.fits" opt=generic clobber=yes')
 
 #after which we store the surface brillance values and associated 1 sigma errors in arrays
 with fits.open('%s/data_profile.fits' % outdir) as data_profile:
@@ -203,10 +211,13 @@ print("Extracting radial profile of the source excising the inner %.2f arcsec" %
 #second version of the command line string
 str_annulus_renorm = '[bin sky=annulus(' + str(ctr_x) + ',' + str(ctr_y) + ',' + str(rlim_pixel)+':'\
               + str(largestsize_pixel) + ':' + str(largestsize_pixel - rlim_pixel) + ')]'
+if args.background is not None:
 
-#extracting the annulus for the data
-os.system('dmextract "' + evt2 + str_annulus_renorm + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"'\
-          + ' outfile=' + outdir + '/curr_profile.fits opt=generic clobber=yes bkgerr=gehrels')
+    #extracting the annulus for the data
+    os.system('dmextract "' + evt2 + str_annulus_renorm + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"'\
+              + ' outfile=' + outdir + '/curr_profile.fits opt=generic clobber=yes bkgerr=gehrels')
+else:
+    os.system('dmextract "' + evt2 + str_annulus_renorm + ' outfile=' + outdir + '/curr_profile.fits opt=generic clobber=yes bkgerr=gehrels')
 
 # now we can get the renormalization data value
 with fits.open('%s/curr_profile.fits' % outdir) as curr_profile:
@@ -218,7 +229,6 @@ radii = np.linspace(0, maxsize, num=nbins + 1)
 write_annuli(ctr_coord, radii.value)
 
 os.system('punlearn dmextract')
-
 
 #Now, we extract the renormalization annuli and the concentric annuli in a similar manner than with the data,
 #adding the renormalization
@@ -244,7 +254,10 @@ for i in range(1, nsim + 1):
 fig_marx, ax_marx = plt.subplots()
 
 ax_marx.set_xlabel('Radius (arcsec)')
-ax_marx.set_ylabel(r'Net surface brightness (cts/s/cm$^2$)')
+if args.background is not None:
+    ax_marx.set_ylabel(r'Net surface brightness (cts/s/cm$^2$)')
+else:
+    ax_marx.set_ylabel(r'Surface brightness (cts/s/cm$^2$)')
 ax_marx.set_yscale('log')
 
 x_axis = np.linspace(max_factor / nbins, max_factor, num=nbins)
@@ -256,8 +269,6 @@ ax_marx.errorbar(radii[1:].value, sbdata, yerr=sbdata_err,
                  color='red', label=r'Observed')
 
 # peform ks test
-
-
 ks, p = ks_2samp(p[0], sbdata)
 
 print('Result of the ks test between the data and the median marx simulation :')
