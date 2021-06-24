@@ -2,7 +2,7 @@
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 24-05-2021
+# @Last modified time: 23-06-2021
 
 
 
@@ -48,7 +48,7 @@ More  details about the comparison at the end of the script
 parser = argparse.ArgumentParser(description='Parameters for the MARX simulattions. To be launched from the directory where all Chandra data is stored (e.g. repro dir)')
 parser.add_argument("--sao", help='Flag to use sao trace in the simulations (only when high degree of accuracy is needed, see https://cxc.harvard.edu/ciao/PSFs/raytracers.html)', action="store_true")
 parser.add_argument("-r", "--region", help='Source region file', type=str, nargs=1, required=True)
-parser.add_argument("-b", "--background", help='Background region file', type=str, nargs=1, required=True)
+parser.add_argument("-b", "--background", help='Background region file', type=str, nargs=1, required=False)
 parser.add_argument("-n", "--nsimulations", help='Number of MARX simulations to perform', type=int, nargs='?', default=500)
 args = parser.parse_args()
 sao_arg = args.sao
@@ -64,7 +64,10 @@ nsim = args.nsimulations
 regfile = args.region[0]
 
 # background region
-bgregfile = args.background[0]
+if args.background is not None:
+    bgregfile = args.background[0]
+else:
+    bgregfile = "None"
 
 python_argument = "%s -n %d --background %s -r %s --sao %s" % (__file__, nsim, bgregfile, regfile, args.sao)
 
@@ -125,7 +128,7 @@ roll_nom=str(fits_evt2[1].header["ROLL_NOM"])
 date = str(round(Time(fits_evt2[1].header["DATE-OBS"]).decimalyear, 3))
 
 #grating of observation
-grating=fits_evt2[1].header["GRATING"]
+grating = fits_evt2[1].header["GRATING"]
 
 #file reprocessing to recreate evenly binned event files and arf to get the best results possible
 os.system('punlearn dmcoords')
@@ -154,8 +157,8 @@ coord_output = str(stdout.read())[2:-3]
 ctr_ra = coord_output[:coord_output.find('\\n')]
 ctr_dec = coord_output[coord_output.find('\\n') + 2:]
 ctr_coord = SkyCoord(ctr_ra, ctr_dec, unit=(u.hourangle, u.deg), frame='fk5')
-ctr_ra=str(ctr_coord.ra.deg)
-ctr_dec=str(ctr_coord.dec.deg)
+ctr_ra = str(ctr_coord.ra.deg)
+ctr_dec = str(ctr_coord.dec.deg)
 
 # We now also know which part of the instrument is used for the detection
 if instrum == 'ACIS':
@@ -195,12 +198,17 @@ os.system('dmtcalc "' + evt2 + '[EVENTS][sky=region('+regfile+')]" marx_evt2_ene
           +' expr="energy=(float)pi*0.0149" clobber=yes')
 
 #bg energy computation. Should be negligible, but included nonetheless
-os.system('dmtcalc "'+evt2+'[EVENTS][sky=region('+bgregfile+')]" marx_bg_energy.fits'\
-          +' expr="energy=(float)pi*0.0149" clobber=yes')
+if args.background is not None:
+    print("Creating energy histogram WITH background subtraction")
+    os.system('dmtcalc "'+evt2+'[EVENTS][sky=region('+bgregfile+')]" marx_bg_energy.fits'\
+              +' expr="energy=(float)pi*0.0149" clobber=yes')
 
-#net histogram computation with real energy binning
-os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:%.1f]" bkg=marx_bg_energy.fits outfile=marx_extract.spec clobber=yes opt=generic' % binning)
+    # net histogram computation with real energy binning
+    os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:%.1f]" bkg=marx_bg_energy.fits outfile=marx_extract.spec clobber=yes opt=generic' % binning)
+else:
 
+    print("Creating energy histogram WITHOUT background subtraction")
+    os.system('dmextract "marx_evt2_energy.fits[bin energy=0.3:9.999:%.1f]" outfile=marx_extract.spec clobber=yes opt=generic' % binning)
 # reading the newly created files
 arf_corr = fits.open('marx_corr.arf')
 arf_data = arf_corr[1].data
@@ -208,8 +216,11 @@ extract = fits.open('marx_extract.spec')
 extract_data = extract[1].data
 
 # obtaining the exposure time
-expos = str(round(extract_data['EXPOSURE_BG'][0], 1))
-
+expos = "%.1f" % extract[1].header['EXPOSURE']
+if args.background is not None:
+    rate_keyword = "NET_RATE"
+else:
+    rate_keyword = "COUNT_RATE"
 '''
 Now we create the spectrum file which will serve as an argument for marx/sao
 For Marx the (received) flux column is supposed to be a normalized flux DENSITY so the net rate column needs
@@ -219,10 +230,9 @@ the correction factor to account for the loss percentage.
 
 if sao_arg:
     print("Running SAO TRACE simulation")
+
+    flux = extract_data[rate_keyword] / (arf_data['SPECRESP'])
     f_sao = open('marx_sao.rdb', 'w+')
-
-    flux = extract_data['NET_RATE'] / (arf_data['SPECRESP'])
-
     f_sao.write('#argument file for SAOTrace, manually created from marx_extract.spec and marx_corr.arf\n')
     f_sao.write('ENERG_LO\tENERG_HI\tFLUX\n')
     for i in range(len(flux)):
@@ -259,10 +269,9 @@ if sao_arg:
 
 else:
     print("Running marx without sao trace")
+    fluxdens = extract_data[rate_keyword] / (arf_data['SPECRESP'] * binning)
+
     f_marx = open('marx_arg.tbl', 'w+')
-
-    fluxdens = extract_data['NET_RATE'] / (arf_data['SPECRESP'] * binning)
-
     f_marx.write('#argument file for larx, manually created from marx_extract.spec and marx_corr.arf\n')
     for i in range(len(fluxdens)):
 
@@ -283,10 +292,6 @@ else:
               +' Roll_Nom='+roll_nom+' SourceRA='+source_ra+' SourceDEC='+source_dec+' Verbose=yes mode=h'
 
 os.system(par_marx)
-
-#%% simulations
-#os.chdir(sdir)
-
 
 # temporary outputs directory, will be deleted
 os.system('mkdir -p ' + outdir)
@@ -323,3 +328,4 @@ os.system('rmdir ' + simdir)
 #moving the initialisation files
 os.system('mv *marx* ' + outdir)
 print("Written results to %s" % outdir)
+print("Run 'python check_extension.py -r %s --background %s -e %s -s %s' to analyse the profile of the PSF" % (regfile, bgregfile, evt2, outdir))
