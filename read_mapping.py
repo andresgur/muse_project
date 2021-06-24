@@ -2,7 +2,7 @@
 # @Date:   07-06-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 16-06-2021
+# @Last modified time: 24-06-2021
 
 import argparse
 import numpy as np
@@ -12,6 +12,7 @@ import muse_utils as mu
 import matplotlib.patches as mpatches
 import bpt_config as bptcfg
 from astropy.io import fits
+
 
 class BPT_diagram:
     """Wrapper for the BPT diagram.
@@ -93,14 +94,6 @@ ax_2.set_xlabel("log([SII]/H$_\\alpha$)")
 ax_3.set_ylabel("log([OIII]/H$_\\beta$)")
 ax_3.set_xlabel("log([OI]/H$_\\alpha$)")
 out_file = "_".join(models)
-min_logx_1 = 10
-max_logx_1 = -10
-min_logx_2 = 10
-max_logx_2 = -10
-min_logx_3 = 10
-max_logx_3 = -10
-min_logy = 10
-max_logy = -10
 # Get all models starting with a given letter
 print(args.mappings)
 for model, color, label in zip(models, colors, labels):
@@ -123,7 +116,7 @@ for model, color, label in zip(models, colors, labels):
                     ('300', '<f8'), ('325', '<f8'), ('350', '<f8'), ('375', '<f8'), ('400', '<f8'), ('425', '<f8'), ('450', '<f8'), ('475', '<f8'), ('500', '<f8'),
                     ('525', '<f8'), ('550', '<f8'), ('575', '<f8'), ('600', '<f8'), ('625', '<f8'), ('650', '<f8'), ('675', '<f8'), ('700', '<f8'), ('725', '<f8'),
                     ('750', '<f8'), ('775', '<f8'), ('800', '<f8'), ('825', '<f8'), ('850', '<f8'), ('875', '<f8'), ('900', '<f8'), ('925', '<f8'), ('950', '<f8'),
-                    ('975', '<f8'), ('1000', '<f8')], usecols=(0 ,1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32))
+                    ('975', '<f8'), ('1000', '<f8')], usecols=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32))
 
         halpha_flux = data[(data["Atom"] == "H") & (data["Species"] == "I") & (data["Wavelength"] == 6562.8000)]
         #hbeta_flux = np.where((data["Atom"] == "H") & (data["Species"] == "I") & (data["Wavelength"] == 4861.3200)) # hbeta is set to 1
@@ -143,20 +136,12 @@ for model, color, label in zip(models, colors, labels):
             ax_1.scatter(ratio1, ratio_y, color=color, s=float(speed), marker=marker)
             ratios_1.append(ratio1)
             ratios_y.append(ratio_y)
-            min_logx_1 = min(ratio1, min_logx_1)
-            max_logx_1 = max(ratio1, max_logx_1)
             ratio2 = np.log10((sII_I_flux[speed] + sII_II_flux[speed]) / halpha_flux[speed])
             ax_2.scatter(ratio2, ratio_y, color=color, s=float(speed), marker=marker)
             ratios_2.append(ratio2)
-            min_logx_2 = min(ratio2, min_logx_2)
-            max_logx_2 = max(ratio2, max_logx_2)
             ratio3 = np.log10(oI_flux[speed] / halpha_flux[speed])
-            min_logy = min(ratio_y, min_logy)
-            max_logy = max(ratio_y, max_logy)
             ax_3.scatter(ratio3, ratio_y, color=color, s=float(speed), marker=marker)
             ratios_3.append(ratio3)
-            min_logx_3 = min(ratio3, min_logx_3)
-            max_logx_3 = max(ratio3, max_logx_3)
             halphas.append(halpha_flux[speed])
             balmer_decrement_ax.scatter(speed, halpha_flux[speed], color=color, s=float(speed), marker=marker)
 
@@ -164,7 +149,7 @@ for model, color, label in zip(models, colors, labels):
         ax_2.plot(ratios_2, ratios_y, color=color, ls=ls)
         ax_3.plot(ratios_3, ratios_y, color=color, ls=ls)
         balmer_decrement_ax.plot(speeds, halphas, color=color, ls=ls)
-
+# plot BPT lines and data points
 y_axis_map = fits.open(bptcfg.lineratio_paths["o3_hb"])
 logy = np.log10(y_axis_map[0].data)
 for bpt, ax, map_1 in zip([1, 2, 3], [ax_1, ax_2, ax_3], lineratiomaps):
