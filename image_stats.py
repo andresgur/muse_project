@@ -2,7 +2,7 @@
 # @Date:   22-06-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 22-06-2021
+# @Last modified time: 25-06-2021
 
 import argparse
 from regions import read_ds9
@@ -15,9 +15,12 @@ ap = argparse.ArgumentParser(description='Compute stats of input images over the
 ap.add_argument("images", nargs='+', help='List of input images', type=str)
 ap.add_argument("-r", "--regions", nargs='?', help='Region ds9 with one or more regions in it. Only annulus, circles and ellipses regions are valid', type=str)
 args = ap.parse_args()
-header = "#region\tmean\tstd\tmedian\tsum\tarea\n"
+header = "#region\tmean\tstd\tmedian\tsum\tsum_2\tmax\tmin\tarea\n"
 for image in args.images:
-    img = Image(image)
+    try:
+        img = Image(image)
+    except ValueError:
+        img = Image(image, ext=1)
     outstring = header
     if args.regions is not None:
         region_list = read_ds9(args.regions)
@@ -34,6 +37,9 @@ for image in args.images:
             median = np.ma.median(img.data)
             std = np.ma.std(img.data)
             sum = np.ma.sum(img.data)
+            sum_2 = np.ma.sum(img.data ** 2)
+            max = np.ma.max(img.data)
+            min = np.ma.min(img.data)
             area = mu.region_to_aperture(region, img.wcs.wcs).area
             img.unmask()
             # use the name given to the region, otherwise number it
@@ -41,14 +47,17 @@ for image in args.images:
                 region_name = region.meta["label"]
             else:
                 region_name = "reg%d" % i
-            outstring += "%s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n" % (region_name, mean, std, median, sum, area)
+            outstring += "%s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n" % (region_name, mean, std, median, sum, sum_2, max, min, area)
 
     else:
         mean = np.ma.mean(img.data)
         median = np.ma.median(img.data)
         std = np.ma.std(img.data)
         sum = np.ma.sum(img.data)
-        outstring += "%s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n" % ("image", mean, std, median, sum, area)
+        sum_2 = np.ma.sum(img.data ** 2)
+        max = np.ma.max(img.data)
+        min = np.ma.min(img.data)
+        outstring += "%s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n" % ("image", mean, std, median, sum, sum_2, max, min, area)
     outfile = image.replace(".fits", ".dat")
     with open(outfile, "w+") as f:
         f.write(outstring)
