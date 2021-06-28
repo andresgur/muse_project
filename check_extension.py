@@ -1,8 +1,8 @@
 # @Author: Andrés Gúrpide <agurpide>
 # @Date:   21-04-2021
 # @Email:  agurpidelash@irap.omp.eu
-# @Last modified by:   agurpide
-# @Last modified time: 23-06-2021
+# @Last modified by:   mparra
+# @Last modified time: 28-06-2021
 
 
 
@@ -36,22 +36,24 @@ def write_annuli(ctr_coord, radii):
     f_reg.write(out_reg)
     f_reg.close()
 
-#marx needs to be installed (https://space.mit.edu/cxc/marx/)
-#saotrace needs to be installed (https://cxc.harvard.edu/cal/Hrma/Raytrace/SAOTrace.html)
+'''
+marx needs to be installed (https://space.mit.edu/cxc/marx/)
+saotrace needs to be installed (https://cxc.harvard.edu/cal/Hrma/Raytrace/SAOTrace.html)
 
-#Don't forget to initialize heasoft, marx and saotrace in your console before launching the script/spyder
-#Don't forget to launch this on your ciao python interpreter
+Don't forget to initialize heasoft, marx and saotrace in your console before launching the script/spyder
+Don't forget to launch this on your ciao python interpreter
 
-#saotrace might not work if you have conflicts in your perl libraries : initialising saotrace might
-#replace one (but not all) of your perl libraries environment variables.
-#You can manually setup the other variables in your saotrace starting script
+saotrace might not work if you have conflicts in your perl libraries : initialising saotrace might
+replace one (but not all) of your perl libraries environment variables.
+You can manually setup the other variables in your saotrace starting script
+'''
 
 parser = argparse.ArgumentParser(description='Check if a point like source is extended by comparing the data with PSF simulations.')
 parser.add_argument("-b", "--bins", type=int, help='Number of radial bins for the PSF/data comparison', default=10, nargs='?')
-parser.add_argument("--background", help='Background region file', type=str, nargs=1, required=False)
+parser.add_argument("-bg", "--background", help='Background region file', type=str, nargs=1, required=False)
 parser.add_argument("-r", "--region", help='Source region file', type=str, nargs=1, required=True)
-parser.add_argument("-s", "--simdir", help='MARX simulation directory', type=str, nargs=1, required=True)
-parser.add_argument("-e", "--event_file", help='Chandra event file of the observation', type=str, nargs=1, required=True)
+parser.add_argument("-e", "--energy_range", help='energy range considered for the simulation', type=str, nargs=1,
+                    default='0.3-10')
 parser.add_argument("-o", "--outdir", help='Output director', type=str, nargs="?", default="psf_comparison")
 parser.add_argument("-f", "--factor", help='Factor to which the PSF computation will be performed. f * the extent of the input region. (2 by default)', type=float, default=2)
 parser.add_argument("-c", "--core", help='Radius to which exclude the PSF core (in arcsec) for the flux normalization (useful in case of pile up see Lehmann et al. 2005)',
@@ -59,14 +61,24 @@ parser.add_argument("-c", "--core", help='Radius to which exclude the PSF core (
 args = parser.parse_args()
 
 #starting dir
-plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
+# plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
 # source region
 regfile = args.region[0]
 
-# PSF simulations dir
-simdir = args.simdir[0]
 
-outdir = args.outdir
+#e_min and e_max come from the simdir, but we add the old 0.3-10 interval for compatibility with the older version 
+e_range=args.energy_range[0]
+
+if e_range=='old': 
+    e_min=300
+    e_max=10000
+    simdir='marx_outs'
+else:
+   e_min=str(int(float(e_range[:e_range.find('-')])*1000))
+   e_max=str(int(float(e_range[e_range.find('-')+1:])*1000))
+   simdir='marx_outs'+'_'+e_range
+   
+outdir = args.outdir+'_'+e_range
 
 #number of annuli
 nbins = args.bins
@@ -78,11 +90,11 @@ max_factor = args.factor
 pta = 0.492
 
 #radius affected by pile-up in the initial data in arsecs
-# rlim_pileup=1.2
 rlim_pileup = args.core
 
 #reading the event file to get some more parameters
-evt2 = args.event_file[0]
+evt2 = glob.glob('./*_evt2.fits')[0]
+
 if args.background is not None:
     #background region (will be used later)
     bgregfile = args.background[0]
@@ -132,12 +144,12 @@ ctr_dec=str(ctr_coord.dec.deg)
 '''
 We  divide our regions in nbins (default 10) annuli ranging from the source center to
 twice the maximal dimension of the source region (which should be an ellipse or a circle in sky region)
-
 At the end we renormalize the outer parts of the PSF to reduce errors.
-The inner limit results from manual computations of the proportion of the initial data affected by pile-up.
+
+The marx annuli (only) are excised of the central part defined by the core argument.
+The inner limit has to result from manual computations of the proportion of the initial data affected by pile-up.
 
 We also use our own computation of the source center instead of the source centroid
-
 -> You'll need to change a few things to use ellipsoid annuli
 
 Moreover, the code expects a background region containing a single region (in sky coordinates).
@@ -171,6 +183,9 @@ print("Extracting radial profile of the source up to %.2f %s" % (maxsize.value, 
 str_annulus='[bin sky=annulus(' + str(ctr_x)+',' + str(ctr_y)+',0:'\
               + str(maxsize_pixel)+':'+str(step)+')]'
 
+#string used for the energy 
+str_ener='[energy='+e_min+':'+str(float(e_max)-0.001)+']'
+
 #With this we can extract the entire concentric annuli in one go
 # outfile="' + outdir + '/data_profile.fits" did not work so we create it here and move it
 
@@ -189,11 +204,11 @@ if args.background is not None:
     f_bg_marx.write(bgreg_line[:bgreg_line.find('#')])
     f_bg_marx.close()
     print("Extracting source brightness profile WITH background subtraction.")
-    os.system('dmextract "' + evt2 + str_annulus + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"' \
+    os.system('dmextract "' + evt2 + str_ener + str_annulus + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"' \
          + ' outfile="' + outdir + '/data_profile.fits" opt=generic clobber=yes')
 else:
     print("Extracting source brightness profile WITHOUT background subtraction.")
-    os.system('dmextract "' + evt2 + str_annulus + '" outfile="' + outdir + '/data_profile.fits" opt=generic clobber=yes')
+    os.system('dmextract "' + evt2 + str_ener + str_annulus + '" outfile="' + outdir + '/data_profile.fits" opt=generic clobber=yes')
 
 #after which we store the surface brillance values and associated 1 sigma errors in arrays
 with fits.open('%s/data_profile.fits' % outdir) as data_profile:
@@ -208,16 +223,17 @@ largestsize_pixel = round(largestsize.value, 2) / pta
 
 print("Extracting radial profile of the source excising the inner %.2f arcsec" % rlim_pileup)
 
-#second version of the command line string
+#second version of the command line string (for marx, take off the central part of the PSF)
 str_annulus_renorm = '[bin sky=annulus(' + str(ctr_x) + ',' + str(ctr_y) + ',' + str(rlim_pixel)+':'\
               + str(largestsize_pixel) + ':' + str(largestsize_pixel - rlim_pixel) + ')]'
+              
 if args.background is not None:
 
     #extracting the annulus for the data
-    os.system('dmextract "' + evt2 + str_annulus_renorm + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"'\
+    os.system('dmextract "' + evt2 + str_ener + str_annulus_renorm + '" bkg="' + evt2 + '[bin sky=@' + outdir + '/marx_bg.reg]"'\
               + ' outfile=' + outdir + '/curr_profile.fits opt=generic clobber=yes bkgerr=gehrels')
 else:
-    os.system('dmextract "' + evt2 + str_annulus_renorm + ' outfile=' + outdir + '/curr_profile.fits opt=generic clobber=yes bkgerr=gehrels')
+    os.system('dmextract "' + evt2 + str_ener + str_annulus_renorm + ' outfile=' + outdir + '/curr_profile.fits opt=generic clobber=yes bkgerr=gehrels')
 
 # now we can get the renormalization data value
 with fits.open('%s/curr_profile.fits' % outdir) as curr_profile:
