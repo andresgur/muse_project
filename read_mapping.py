@@ -2,7 +2,7 @@
 # @Date:   07-06-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 24-06-2021
+# @Last modified time: 30-06-2021
 
 import argparse
 import numpy as np
@@ -74,19 +74,22 @@ plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
 
 bpt_type = bptcfg.type
 lineratiomaps = [bptcfg.lineratio_paths["n2_ha"], bptcfg.lineratio_paths["s2_ha"], bptcfg.lineratio_paths["oI_ha"]]
-
+grid_figure, grid_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.1}, figsize=(12.8, 7.7))
 figure_bpt1, ax_1 = plt.subplots(1)
 figure_bpt2, ax_2 = plt.subplots(1)
 figure_bpt3, ax_3 = plt.subplots(1)
 figure_balmer_decrement, balmer_decrement_ax = plt.subplots(1)
 patches = []
-speeds = ["100", "150", "200", "250", "300", "350"]
+speeds = ["100", "150", "200", "250", "300"]
 markers = mu.get_markers_array(len(speeds))
 models = ["M", "R", "J", "P", "Q", "T", "U", "V", "L", "S"]
-colors = mu.create_color_array(len(models), "plasma")
+colors = mu.create_color_array(len(models), "Dark2")
 labels = ["Solar abundance, n = 1 cm$^{-3}$", "Twice solar abundance, n = 1 cm$^{-3}$", "Dopita et al. 2005, n = 1 cm$^{-3}$", "SMC, n = 1 cm$^{-3}$", "LMC, n = 1 cm$^{-3}$",
           "Solar abundance, n = 0.01 cm$^{-3}$", "Solar abundance, n = 0.1 cm$^{-3}$", "Solar abundance, n = 10 cm$^{-3}$", "Solar abundance, n = 100 cm$^{-3}$", "Solar abundance, n = 1000 cm$^{-3}$"]
-
+grid_axes[0].set_ylabel("log([OIII]/H$_\\beta$)")
+grid_axes[0].set_xlabel("log([NII]/H$_\\alpha$)")
+grid_axes[1].set_xlabel("log([SII]/H$_\\alpha$)")
+grid_axes[2].set_xlabel("log([OI]/H$_\\alpha$)")
 ax_1.set_ylabel("log([OIII]/H$_\\beta$)")
 ax_1.set_xlabel("log([NII]/H$_\\alpha$)")
 ax_2.set_ylabel("log([OIII]/H$_\\beta$)")
@@ -134,17 +137,21 @@ for model, color, label in zip(models, colors, labels):
             ratio1 = np.log10(nII_flux[speed] / halpha_flux[speed])
             ratio_y = np.log10(oIII_flux[speed])
             ax_1.scatter(ratio1, ratio_y, color=color, s=float(speed), marker=marker)
+            grid_axes[0].scatter(ratio1, ratio_y, color=color, s=float(speed), marker=marker)
             ratios_1.append(ratio1)
             ratios_y.append(ratio_y)
             ratio2 = np.log10((sII_I_flux[speed] + sII_II_flux[speed]) / halpha_flux[speed])
             ax_2.scatter(ratio2, ratio_y, color=color, s=float(speed), marker=marker)
+            grid_axes[1].scatter(ratio2, ratio_y, color=color, s=float(speed), marker=marker)
             ratios_2.append(ratio2)
             ratio3 = np.log10(oI_flux[speed] / halpha_flux[speed])
             ax_3.scatter(ratio3, ratio_y, color=color, s=float(speed), marker=marker)
+            grid_axes[2].scatter(ratio3, ratio_y, color=color, s=float(speed), marker=marker)
             ratios_3.append(ratio3)
             halphas.append(halpha_flux[speed])
             balmer_decrement_ax.scatter(speed, halpha_flux[speed], color=color, s=float(speed), marker=marker)
-
+        for ax, ratios in zip(grid_axes, [ratios_1, ratios_2, ratios_3]):
+            ax.plot(ratios, ratios_y, color=color, ls=ls)
         ax_1.plot(ratios_1, ratios_y, color=color, ls=ls)
         ax_2.plot(ratios_2, ratios_y, color=color, ls=ls)
         ax_3.plot(ratios_3, ratios_y, color=color, ls=ls)
@@ -152,33 +159,39 @@ for model, color, label in zip(models, colors, labels):
 # plot BPT lines and data points
 y_axis_map = fits.open(bptcfg.lineratio_paths["o3_hb"])
 logy = np.log10(y_axis_map[0].data)
-for bpt, ax, map_1 in zip([1, 2, 3], [ax_1, ax_2, ax_3], lineratiomaps):
+for bpt, ax, map_1, grid_ax in zip([1, 2, 3], [ax_1, ax_2, ax_3], lineratiomaps, grid_axes):
     x_axis_map = fits.open(map_1)
     logx = np.sort(np.log10(x_axis_map[0].data))
     bpt_diagram = BPT_diagram(bpt)
     inter_starform = np.sort(logx[logx < bpt_diagram.pure_starform_max])
     ax.plot(inter_starform, bpt_diagram.pure_starform_crv(inter_starform), color="black", zorder=100)
-
+    grid_ax.plot(inter_starform, bpt_diagram.pure_starform_crv(inter_starform), color="black", zorder=100)
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
     inter_def = np.sort(inter_def[inter_def < bpt_diagram.int_inter[1]])
     ax.plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
-
+    grid_ax.plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
     agnliner_def = logx[logx > bpt_diagram.agnliner_inter[0]]
     agnliner_def = np.sort(agnliner_def[agnliner_def < bpt_diagram.agnliner_inter[1]])
     # zorder 100 so it stands above the points
     ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
-    out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.05
-    out_y=abs(np.nanmax(logy)-np.nanmin(logy)) * 0.05
+    grid_ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
+    out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.1
+    out_y=abs(np.nanmax(logy)-np.nanmin(logy)) * 0.08
     ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
     ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
     ax.scatter(logx, logy, alpha=0.1, color="gray", zorder=-10, ls="None")
+    grid_ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
+    grid_ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
+    grid_ax.scatter(logx, logy, alpha=0.1, color="gray", zorder=-10, ls="None")
+grid_axes[0].legend(handles=patches, fontsize=18)
 ax_1.legend(handles=patches)
-ax_2.legend(handles=patches)
-ax_3.legend(handles=patches)
+#ax_2.legend(handles=patches)
+#ax_3.legend(handles=patches)
 balmer_decrement_ax.legend(handles=patches)
 outfile = out_file.replace(".txt#", "") + ".png"
 figure_bpt1.savefig("bpt1_%s" % outfile)
 figure_bpt2.savefig("bpt2_%s" % outfile)
 figure_bpt3.savefig("bpt3_%s" % outfile)
 figure_balmer_decrement.savefig("balemer_decrement.png")
+grid_figure.savefig("grid_fig%s.png" % outfile)
 print("Results stored to %s" % outfile)
