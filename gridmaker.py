@@ -5,11 +5,24 @@ Created on Tue Jun 29 16:27:50 2021
 """
 
 '''
-downloads MAPPINGSV shock only models and stores them in the current directory
+This script downloads MAPPINGSV shock only models and stores them in the current directory
 
-Only gets the ratios of interest for the BPT
+The database is on SQL i.e. blocked on IRAP network
 
-you need to have pymysql installed
+The resulting csv files contain the LINEAR BPT ratios (BPT uses log10)
+
+pymysql needs to be installed
+
+The model names and abundance are manually inputed in the code.
+As such, it can be wise to check if they are new models on the dtb, at :
+http://3mdb.astro.unam.mx:3686/paramexplorer (blocked on IRAP network due to SQL port)
+
+model parameter units :
+
+density                  cm⁻³
+magnetic field           microGauss
+shock velocity           km.s⁻¹
+
 '''
 
 
@@ -21,6 +34,7 @@ import pandas as pd
 
 os.system('mkdir tables')
 os.chdir('tables')
+
 ''' DATABASE CONNECTION'''
 
 # Get credentials stored from the environment variables
@@ -77,5 +91,4 @@ for i in range(len(models)):
                                 AND shock_params.ref='"""+models[i]+"""'
                                 ORDER BY preshck_dens, mag_fld, shck_vel;""", con=db)
                                 
-        curr_csv.to_csv(r'./'+abunds[i][j]+'.csv',sep='\t')
-
+        curr_csv.to_csv(r'./'+abunds[i][j]+'.csv',sep='\t',index=False)
