@@ -7,7 +7,6 @@
 This script automatically searches for the BPT line maps in the subdirectories of
 the starting directory, then computes the newest version of the BPT diagram from
 Law et al. 2021 (https://arxiv.org/abs/2011.06012)
-
 Arguments can be used to overlay contours, ds9 regions, change the output directory
 and manually specify the starting line ratio files instead of doing an automatic search
 '''
@@ -74,7 +73,7 @@ class BPT_diagram:
                 self.x_axis="log([OI]/H$_\\alpha$)"
                 self.agnliner_inter = (-0.9, 0.3)
                 self.int_inter = (-0.25, 0.65)
-            
+
         if self.index=='proj':
             self.x_axis="P1 (0.77*N2+0.54*S2+0.33*R3)"
             self.y_axis="P2 (-0.57*N2+0.82*S2)"
@@ -105,15 +104,16 @@ class BPT_diagram:
 
     def proj_x(self,logN2,logS2,logR3):
         return 0.77 * logN2 + 0.54 * logS2 + 0.33* logR3
-    
+
     def proj_y(self,logN2,logS2):
         return -0.57*logN2+0.82*logS2
-    
+
     def cold_projcrv(self,logy):
         return 2.597 * logy**3 - 1.865 * logy**2 + 0.105 * logy - 0.435
-    
+
     def warm_projcrv(self,logy):
         return 3.4 * logy**3 - 2.233 * logy**2 - 0.184* logy - 0.172
+
 
 def plot_bpt_map(image, colormap=ListedColormap(["blue", "green", "pink", "orange"]), outfile="bpt_image.png", regions=None, contours=None):
     """ Create plot of the BPT diagram map
@@ -178,10 +178,10 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         grid_ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
         grid_ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
     bpt_diagram = BPT_diagram(bptype)
-    
+
     ax.set_xlabel(bpt_diagram.x_axis)
     ax.set_ylabel(bpt_diagram.y_axis)
-    
+
     if grid_ax is not None:
         grid_ax.set_xlabel(bpt_diagram.x_axis)
     # defining each region
@@ -226,7 +226,8 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         if bpt_data[region].size == 0:
             continue
         cmap = mpl.cm.get_cmap(map)
-        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region]), vmax=np.nanmax(bpt_data[region]))
+        # apply offset to the minimum avoid very light colors
+        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region]) - 0.2, vmax=np.nanmax(bpt_data[region]))
         ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
@@ -238,12 +239,13 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
     bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
     return bpt_fits, bpt_indexes, figure
 
+
 def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
 
     N2_map= fits.open(map_N2)
     S2_map= fits.open(map_S2)
     R3_map= fits.open(map_R3)
-    
+
     logN2=np.log10(N2_map[0].data)
     logS2=np.log10(S2_map[0].data)
     logR3=np.log10(R3_map[0].data)
@@ -257,72 +259,73 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
     figure, ax = plt.subplots(1)
 
     bpt_diagram = BPT_diagram('proj')
-    
+
     #defining x and y for the projection according to the curves written in the class
     logx=bpt_diagram.proj_x(logN2, logS2, logR3)
     logy=bpt_diagram.proj_y(logN2, logS2)
-    
+
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
     out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.05
     out_y=abs(np.nanmax(logy)-np.nanmin(logy)) * 0.05
-    
+
     ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
     ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
-    
+
     if grid_ax is not None:
         grid_ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
         grid_ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
-        
+
     ax.set_xlabel(bpt_diagram.x_axis)
     ax.set_ylabel(bpt_diagram.y_axis)
-    
+
     if grid_ax is not None:
         grid_ax.set_xlabel(bpt_diagram.x_axis)
 
     # defining each region
-    
+
     cold_regions=np.where(logx<bpt_diagram.cold_projcrv(logy))
     int_regions=np.where((logx>bpt_diagram.cold_projcrv(logy)) & (logx<bpt_diagram.warm_projcrv(logy)))
     warm_regions=np.where(logx>bpt_diagram.warm_projcrv(logy))
-    
+
     bpt_data[cold_regions] = logx [cold_regions] + logy [cold_regions]
     bpt_indexes[cold_regions] = 0
-    
+
     bpt_data[int_regions] = logx [int_regions] + logy [int_regions]
     bpt_indexes[int_regions] = 1
-    
+
     bpt_data[warm_regions] = logx [warm_regions] + logy [warm_regions]
     bpt_indexes[warm_regions] = 2
-    
+
     bpt_data[invalid_pixels] = np.nan
     bpt_indexes[invalid_pixels] = np.nan
-    
+
     #plotting the separations
     logy_arr=np.sort(np.reshape(logy,np.size(logy)))
-    
+
     #cold-int
     ax.plot(bpt_diagram.cold_projcrv(logy_arr),logy_arr,color="black",zorder=1000)
 
     #int-warm
     ax.plot(bpt_diagram.warm_projcrv(logy_arr),logy_arr,color="black",zorder=1000)
-    
+
     regions = [cold_regions, int_regions, warm_regions]
 
     if grid_ax is not None:
         grid_ax.plot(bpt_diagram.cold_projecrv(logy_arr),logy_arr,color="black",zorder=1000)
         grid_ax.plot(bpt_diagram.warm_projecrv(logy_arr),logy_arr,color="black",zorder=1000)
-        
+
     # ploting the regions
     for map, region in zip(colormap, regions):
         if bpt_data[region].size == 0:
             continue
         cmap = mpl.cm.get_cmap(map)
-        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region]), vmax=np.nanmax(bpt_data[region]))
+        # apply offset to avoid very white regions
+        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region]) - 0.2, vmax=np.nanmax(bpt_data[region]))
         ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
     ax.legend()
-    
+
     bpt_fits = fits.PrimaryHDU(data=bpt_data, header=N2_map[0].header)
     if "WCSAXES" in bpt_fits.header:
         if bpt_fits.header["WCSAXES"] == 3:
@@ -354,11 +357,11 @@ if args.config:
     # plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
     bpt_type = bptcfg.type
     lineratiomaps = [bptcfg.lineratio_paths["n2_ha"], bptcfg.lineratio_paths["s2_ha"], bptcfg.lineratio_paths["oI_ha"]]
-    
+
     '''STANDARD DIAGRAMS'''
-    
+
     ymap = Image(bptcfg.lineratio_paths["o3_hb"])
-    logy = np.log10(ymap.data)
+    logy = np.log10(ymap.data.data)
     colormap = ["Blues", "Greens", "Purples", "Oranges"]
 
     grid_figure, grid_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, figsize=(19.2, 8))
@@ -366,7 +369,7 @@ if args.config:
     grid_axes[0].set_ylabel("log([OIII]/H$_\\beta$)")
 
     grid_im_axes[0].set_ylabel('Dec', labelpad=-2)
-    
+
     for myax in grid_im_axes[1:]:
         myax.coords[1].set_auto_axislabel(False)
         myax.coords[1].set_ticklabel_visible(False)
@@ -381,14 +384,15 @@ if args.config:
 
         img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
         for index, map in enumerate(colormap):
-            region = np.ma.masked_array(bpt_img.data, bpt_indexes != index)
+            mask = (bpt_indexes != index) | (np.isnan(bpt_indexes))
+            region = np.ma.masked_array(bpt_img.data, mask)
             if region.size == 0:
                 continue
             #bpt_img.mask_selection(region)
             cmap = mpl.cm.get_cmap(map)
-            #norm = mpl.colors.Normalize(vmin=np.nanmin(region), vmax=np.nanmax(region))
-            ax.imshow(region, cmap=cmap, origin="lower")
-            grid_im_axes[i].imshow(region, cmap=cmap, origin="lower")
+            norm = mpl.colors.Normalize(vmin=np.nanmin(region) - 0.2, vmax=np.nanmax(region))
+            ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
+            grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
             bpt_img.unmask()
         grid_im_axes[i].set_xlabel('Ra', labelpad=1)
         ax.set_xlabel('Ra', labelpad=0)
@@ -413,9 +417,9 @@ if args.config:
     grid_figure.savefig("%s/grid_bpts.png" % outdir)
     grid_img_figure.savefig("%s/grid_img_bpt.png" % outdir, format="png", bbox_inches="tight", pad_inches=0.4)
     print("Results stored to %s" % outfile)
-    
+
     '''PROJECTION DIAGRAM'''
-    
+
     ymap_proj = bptcfg.lineratio_paths["o3_hb"]
     colormap_proj = ["Blues", "Greens", "Reds"]
 
@@ -436,7 +440,7 @@ if args.config:
         #norm = mpl.colors.Normalize(vmin=np.nanmin(region), vmax=np.nanmax(region))
         ax_proj.imshow(region, cmap=cmap, origin="lower")
         bpt_img.unmask()
-        
+
     ax_proj.set_xlabel('Ra', labelpad=0)
     ax_proj.set_ylabel('Dec', labelpad=-2)
     if args.contours is not None:
@@ -454,11 +458,11 @@ if args.config:
     if args.regions is not None:
         for region in args.regions:
             mu.plot_regions(region, ax, bpt_img.data_header)
-            
+
     img_figure_proj.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4)
-    
+
     print("Results stored to %s" % outfile)
-    
+
 else:
     print("Running in maxime noob mode let's goooo")
     sdir='/home/mparra/PARRA/Observ/Andres/optical/'
