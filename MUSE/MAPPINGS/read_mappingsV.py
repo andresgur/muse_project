@@ -75,7 +75,7 @@ abunds_use=abunds[use_pos]
 #creating the labels which we will use for the grids
 labels_use0=np.array([r"$Z_{ISM}$ = "]*len(abunds_use))
 labels_use1=np.char.add(abunds_use.astype(str),np.array([' i.e. ']*len(abunds_use)))
-labels_use2=np.char.add(abunds_frac.round(decimals=3)[use_pos].astype(str),np.array([r" $Z/Z_\odot$"]*len(abunds_use)))
+labels_use2=np.char.add(abunds_frac.round(decimals=3)[use_pos].astype(str),np.array([r" $Z_\odot$"]*len(abunds_use)))
 labels_use=np.char.add(labels_use1,labels_use2)
 labels_use=np.char.add(labels_use0,labels_use)
 
