@@ -13,7 +13,6 @@ import matplotlib.patches as mpatches
 import bpt_config as bptcfg
 from astropy.io import fits
 
-
 class BPT_diagram:
     """Wrapper for the BPT diagram.
     Parameters
