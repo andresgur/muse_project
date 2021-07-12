@@ -17,6 +17,7 @@ import logging
 import mpdaf.MUSE.PSF as psf
 import numpy as np
 from regions import read_ds9, DS9RegionParserError
+from astropy.wcs import WCS
 
 
 def extract_spectrum(cube, reg_file, mode="sum"):
@@ -227,8 +228,10 @@ for cubefile in muse_cubes:
         back_spe, bkg_subcube = extract_spectrum(cube, args.background, args.mode)
 
         logger.info("Subtracting scaled background...")
-        bkg_area = mu.region_to_aperture(args.background, cube.wcs).area
-        source_area = mu.region_to_aperture(region_file, cube.wcs).area
+        bkg_reg = read_ds9(args.background)[0]
+        bkg_area = mu.region_to_aperture(bkg_reg, cube.wcs.wcs).area
+        source_reg = read_ds9(region_file)[0]
+        source_area = mu.region_to_aperture(source_reg, cube.wcs.wcs).area
         corrected_spe = source_spe - back_spe * source_area / bkg_area
         # free memory
         bkg_subcube = None
