@@ -47,8 +47,6 @@ def region_to_aperture(region, wcs=None):
         center = region.center.fk5
         if region_type == "CircleSkyRegion":
             return SkyCircularAperture(center, r=region.radius).to_sky(wcs)
-        elif region_type == "CircleAnnulusSkyRegion":
-            print("Region %s not implemented")
         elif region_type == "EllipseSkyRegion":
             return SkyEllipticalAperture(center, a=region.width, b=region.height, angle=region.angle).to_sky(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
