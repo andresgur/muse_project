@@ -41,6 +41,10 @@ Please input real region files and not links
 No background included as of now in the simulation parameters (it is included in the comparison after)
 (why are you even checking your psf if your source isn't bright enough to stand out)
 More  details about the comparison at the end of the script
+
+
+IF marxpileup.par is not found
+try to use "locate marxpileup.par" and delete it if it is empty
 '''
 
 ''' PARAMETERS '''
