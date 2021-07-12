@@ -26,14 +26,10 @@ def extract_spectrum(cube, reg_file, mode="sum"):
     ----------
     cube: mpdaf.obj.Cube
         Cube to extract the spectrum from
-    reg: regions
-        Region from read_ds9
+    reg: str
+        Region file
     mode: str
         Mode can be sum for integrated spectrum, average or psf
-    lmin: float
-        Minimum wavelenght to extract (default 0)
-    lmax: float
-        Maximum wavelength to extract (deafult infinite)
     """
     try:
         reg = read_ds9(reg_file)[0]
@@ -64,6 +60,15 @@ def extract_spectrum(cube, reg_file, mode="sum"):
 
             subcube.mask_ellipse((centerdec.value, centerra.value), (width.value, height.value), angle.value, inside=False,
                                  lmin=None, lmax=None, unit_center=centerra.unit, unit_radius=height.unit)
+            logger.info("Extracting spectrum from cube %s around position (%s) for region %s" % (cubefile,
+                        (centerra, centerdec), region_type))
+        elif region_type == 'CircleAnnulusSkyRegion':
+            inner_radius = reg.inner_radius
+            outer_radius = reg.outer_radius
+            subcube.mask_region((centerdec.value, centerra.value), inner_radius.value, inside=True,
+                                 lmin=None, lmax=None, unit_center=centerra.unit, unit_radius=inner_radius.unit)
+            subcube.mask_region((centerdec.value, centerra.value), outer_radius.value, inside=False,
+                                 lmin=None, lmax=None, unit_center=centerra.unit, unit_radius=inner_radius.unit)
             logger.info("Extracting spectrum from cube %s around position (%s) for region %s" % (cubefile,
                         (centerra, centerdec), region_type))
 
@@ -196,12 +201,7 @@ logger.addHandler(stream_handler)
 figure_comparison = None
 white_light_image = None
 
-if os.path.isfile(region_file):
-    #regs = read_ds9(region_file)
-    #logger.info("Found %i region(s) from %s" % (len(regs), region_file))
-    #logger.info(regs)
-    print("Region file exists")
-else:
+if not os.path.isfile(region_file):
     logger.error("Region file %s not found" % region_file)
     sys.exit()
 
@@ -220,7 +220,7 @@ for cubefile in muse_cubes:
         print(cube)
 
     else:
-        logger.warning("Cube %s not found. Skipping..." % cubefile)
+        logger.error("Cube %s not found. Skipping..." % cubefile)
         continue
 
     source_spe, source_subcube = extract_spectrum(cube, region_file, args.mode)
@@ -234,13 +234,18 @@ for cubefile in muse_cubes:
     # background region is present, subtract it from the source spectrum
     if args.background is not None:
         back_spe, bkg_subcube = extract_spectrum(cube, args.background, args.mode)
-
-        logger.info("Subtracting scaled background...")
-        bkg_area = mu.region_to_aperture(args.background, cube.wcs).area
-        source_area = mu.region_to_aperture(region_file, cube.wcs).area
-        corrected_spe = source_spe - back_spe * source_area / bkg_area
+        bkg_subcube_wl = bkg_subcube.sum(axis=0)
+        bkg_subcube_wl.write("%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
         # free memory
         bkg_subcube = None
+        bkg_subcube_wl = None
+
+        logger.info("Subtracting scaled background...")
+        bkg_reg = read_ds9(args.background)[0]
+        bkg_area = mu.region_to_aperture(bkg_reg, cube.wcs.wcs).area
+        source_reg = read_ds9(region_file)[0]
+        source_area = mu.region_to_aperture(source_reg, cube.wcs.wcs).area
+        corrected_spe = source_spe - back_spe * source_area / bkg_area
         back_spe.write("%s/%s%s_bkgspec.fits" % (outdir, outcubename, outname))
         corrected_spe.write("%s/%s%s_source_subspec.fits" % (outdir, outcubename, outname))
         plt.figure()
@@ -263,6 +268,7 @@ for cubefile in muse_cubes:
     logger.debug('Writing outputs to %s...' % outdir)
     source_spe.write("%s/%s%s_sourcespec.fits" % (outdir, outcubename, outname))
     mu.plot_image("%s/%s%s_whiteimage" % (outdir, outcubename, outname), "%s/%s%s_img.fits" % (outdir, outcubename, outname))
+    mu.plot_image("%s/%s%s_bkgimg" % (outdir, outcubename, outname), "%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
 
     if figure_comparison is not None:
         figure_comparison.savefig("%s/%s%sextraction_region.pdf" % (outdir, outcubename, outname))
