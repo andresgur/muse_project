@@ -369,3 +369,14 @@ print("Written results to %s" % outdir)
 ax_marx.legend()
 
 fig_marx.savefig("%s/psf_comparison_%d.png" % (outdir, nsim))
+
+
+def ratiotorad(x):
+    return x * largestsize.value
+
+
+def radtoratio(x):
+    return x / largestsize.value
+
+#sec_ax=ax_marx.secondary_xaxis('top',functions=(ratiotorad,radtoratio))
+#sec_ax.set_xlabel('Radius (arcsec)')
