@@ -2,7 +2,7 @@
 # @Date:   02-09-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 12-07-2021
+# @Last modified time: 13-07-2021
 # Script to extract a spectrum from a certain region around a center of the cube. Background subtraction is also possible taking into acocunt the scaling of the areas
 
 # imports
@@ -239,14 +239,15 @@ for cubefile in muse_cubes:
         # free memory
         bkg_subcube = None
         bkg_subcube_wl = None
-
-        logger.info("Subtracting scaled background...")
-        bkg_reg = read_ds9(args.background)[0]
-        bkg_area = mu.region_to_aperture(bkg_reg, cube.wcs.wcs).area
-        source_reg = read_ds9(region_file)[0]
-        source_area = mu.region_to_aperture(source_reg, cube.wcs.wcs).area
-        corrected_spe = source_spe - back_spe * source_area / bkg_area
         back_spe.write("%s/%s%s_bkgspec.fits" % (outdir, outcubename, outname))
+        if args.mode == "sum":
+            logger.info("Subtracting scaled background...")
+            bkg_reg = read_ds9(args.background)[0]
+            bkg_area = mu.region_to_aperture(bkg_reg, cube.wcs.wcs).area
+            source_reg = read_ds9(region_file)[0]
+            source_area = mu.region_to_aperture(source_reg, cube.wcs.wcs).area
+            back_spe *= source_area / bkg_area
+        corrected_spe = source_spe - back_spe
         corrected_spe.write("%s/%s%s_source_subspec.fits" % (outdir, outcubename, outname))
         plt.figure()
         corrected_spe.info()
