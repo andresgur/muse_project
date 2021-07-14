@@ -112,7 +112,7 @@ if args.config:
             for region in args.regions:
                 mu.plot_regions(region, ax, bpt_img.data_header)
                 mu.plot_regions(region, grid_im_axes[i], bpt_img.data_header)
-        img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4)
+        img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4, dpi=300)
         
     grid_axes[1].legend()
     grid_figure.savefig("%s/grid_bpts.png" % outdir)
