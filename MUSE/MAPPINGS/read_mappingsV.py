@@ -99,7 +99,7 @@ for i, ratiomap in enumerate(lineratiomaps):
     
     bpt_type = i + 1
     bpt_fits, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions, args.contours, bpt_type, colormap,title=title,
-                                                shock_mods=mod_use,mod_labels=labels_use,figsize='big')
+                                                shock_mods=mod_use,mod_labels=labels_use,figsize='big',bpt_labels=False)
 
     outfile = "%s/mapV_bpt%d_d%d.png" % (outdir, bpt_type,dens)
     figure.savefig(outfile, format="png", bbox_inches="tight", pad_inches=0.4)
