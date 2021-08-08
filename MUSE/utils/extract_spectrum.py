@@ -2,7 +2,7 @@
 # @Date:   02-09-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 13-07-2021
+# @Last modified time: 08-08-2021
 # Script to extract a spectrum from a certain region around a center of the cube. Background subtraction is also possible taking into acocunt the scaling of the areas
 
 # imports
@@ -269,7 +269,8 @@ for cubefile in muse_cubes:
     logger.debug('Writing outputs to %s...' % outdir)
     source_spe.write("%s/%s%s_sourcespec.fits" % (outdir, outcubename, outname))
     mu.plot_image("%s/%s%s_whiteimage" % (outdir, outcubename, outname), "%s/%s%s_img.fits" % (outdir, outcubename, outname))
-    mu.plot_image("%s/%s%s_bkgimg" % (outdir, outcubename, outname), "%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
+    if args.background is not None:
+        mu.plot_image("%s/%s%s_bkgimg" % (outdir, outcubename, outname), "%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
 
     if figure_comparison is not None:
         figure_comparison.savefig("%s/%s%sextraction_region.pdf" % (outdir, outcubename, outname))
