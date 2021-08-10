@@ -2,7 +2,7 @@
 # @Date:   20-05-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 30-06-2021
+# @Last modified time: 10-08-2021
 # Script to compute extinction map
 from astropy.io import fits
 import argparse
@@ -34,8 +34,8 @@ class C00:
 
 ap = argparse.ArgumentParser(description='Calculate an extinction map using the extinction curve of Calzetti for a given value of R')
 ap.add_argument("-r", "--rootname", nargs='?', help="Root name of the input line files", type=str, default="cleancamel")
-ap.add_argument("-R", "--ratio", help="Ratio of total to selective extinction Av/E(B-V)", type=float, default=4.05, nargs="?")
-ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio", type=float, default=2.86, nargs="?")
+ap.add_argument("-R", "--ratio", help="Ratio of total to selective extinction Av/E(B-V). Default Rv=4.05 from Calzetti", type=float, default=4.05, nargs="?")
+ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio. Default 2.86", type=float, default=2.86, nargs="?")
 ap.add_argument("-b", "--hbeta", help="Path to HBETA flux maps", type=str, required=True, nargs=1)
 ap.add_argument("-a", "--halpha", help="Path to HALPHA flux maps", type=str, required=True, nargs=1)
 args = ap.parse_args()
@@ -61,9 +61,11 @@ halpha_map = fits.open(halpha_file, extname="IMAGE")
 if halpha_map[0].header["WCSAXES"] == 3:
     halpha_map[0].header["WCSAXES"] = 2
 hbeta_map = fits.open(hbeta_file, extname="IMAGE")
+ext = 0
+if hbeta_map[ext].data is None:
+    ext = 1
 
-
-observed_ratios = halpha_map[0].data / hbeta_map[0].data
+observed_ratios = halpha_map[0].data / hbeta_map[ext].data
 # get E(beta-halpha)
 color_excess = 2.5 * np.log10(observed_ratios / args.intrinsic)
 color_excess_map = fits.PrimaryHDU(data=color_excess, header=halpha_map[0].header)
@@ -80,6 +82,7 @@ print(kalpha)
 print("k(beta) - k(halpha)")
 print(curve_color_excess)
 Ebv = color_excess / curve_color_excess
+Ebv[np.where(Ebv < 0)] = 0
 color_excess_map = fits.PrimaryHDU(data=Ebv, header=halpha_map[0].header)
 color_excess_map.writeto("%s/color_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
 print("Color excess map saved to %s/total_color_excess.fits" % outdir)
@@ -92,7 +95,7 @@ print("HBETA error file found: %s" % hbeta_efile)
 halpha_emap = fits.open(halpha_efile, extname="IMAGE")
 hbeta_emap = fits.open(hbeta_efile, extname="IMAGE")
 # derivative of log10(x) --> x'/x log10e (derivative of dHa/Hb/dHa = 1/Hb; d(Ha/Hb)/dHb = Ha/Hb^2
-err_ebv = 2.5 * np.sqrt((np.log10(np.e) * (1 / halpha_map[0].data) * halpha_emap[0].data) ** 2 + (np.log10(np.e) * (1 / hbeta_map[0].data) * hbeta_emap[0].data)**2) / curve_color_excess
+err_ebv = 2.5 * np.sqrt((np.log10(np.e) * (1 / halpha_map[0].data) * halpha_emap[0].data) ** 2 + (np.log10(np.e) * (1 / hbeta_map[ext].data) * hbeta_emap[0].data)**2) / curve_color_excess
 ecolor_excess_map = fits.PrimaryHDU(data=err_ebv, header=halpha_map[0].header)
 
 ecolor_excess_map.writeto("%s/ecolor_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
@@ -103,13 +106,18 @@ for line in lines:
         print("Line map for %s line not found" % line)
         continue
     wavemap = wavemap[0]
+
     fluxmap = glob.glob('./camel_*/cleaned_images/%s_*[!e]flux_*%s.fits' % (args.rootname, line))[0]
     efluxmap = glob.glob('./camel_*/cleaned_images/%s_*eflux_*%s.fits' % (args.rootname, line))[0]
     print("Using wavelength map: %s" % wavemap)
     print("Using flux map: %s" % fluxmap)
     print("Using eflux map: %s" % efluxmap)
-    wavelenghts = fits.open(wavemap, extname="IMAGE")[0].data
-    fluxes_fits = fits.open(fluxmap, extname="IMAGE")[0]
+    wavelenghts_fits = fits.open(wavemap, extname="IMAGE")
+    ext = 0
+    if wavelenghts_fits[ext].data is None:
+        ext = 1
+    wavelenghts = wavelenghts_fits[ext].data
+    fluxes_fits = fits.open(fluxmap, extname="IMAGE")[ext]
     efluxes_fits = fits.open(efluxmap, extname="IMAGE")[0]
     fluxes = fluxes_fits.data
     efluxes = efluxes_fits.data
