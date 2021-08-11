@@ -223,7 +223,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
     #plotting the separations of the three curves
     #first one
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
-    ax.plot(inter_starform[np.where(inter_starform < -0.360)], bpt_diagram.pure_starform_crv(inter_starform[np.where(inter_starform < -0.360)]), color="black", zorder=100)
+    ax.plot(inter_starform[np.where(inter_starform < 0.360)], bpt_diagram.pure_starform_crv(inter_starform[np.where(inter_starform < 0.360)]), color="black", zorder=100)
 
     #second one
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
