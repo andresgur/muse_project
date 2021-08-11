@@ -156,6 +156,9 @@ def plot_bpt_map(image, colormap=ListedColormap(["blue", "green", "pink", "orang
 def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=None, shock_mods=None, mod_labels=None,figsize=None,bpt_labels=False):
 
     x_axis_map = fits.open(map_1)
+    
+    print("WARNING: values below -1.0 for  [OIII]/Hb are beign ignored")
+    logy.data[np.where(logy < -1.0)] = np.nan
 
     logx = np.log10(x_axis_map[0].data)
 
