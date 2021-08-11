@@ -1,17 +1,18 @@
 # @Author: mparra
 # @Date:   06-07-2021
 # @Email:  maxime.parra@irap.omp.eu
-# @Last modified by:   mparra
-# @Last modified time: 09-07-2021
+# @Last modified by:   agurpide
+# @Last modified time: 11-08-2021
 
 
 import os,sys
-sys.path.append('/home/mparra/PARRA/Scripts/Python/MUSE/MAPPINGS/')
-sys.path.append('/home/mparra/PARRA/Scripts/Python/MUSE/')
-sys.path.append('/home/mparra/PARRA/Scripts/Python/MUSE/BPT/')
+
+sys.path.append('/home/agurpide/scripts/pythonscripts/maxime_project/muse_project/MAPPINGS/')
+sys.path.append('/home/agurpide/scripts/pythonscripts/maxime_project/muse_project/BPT/')
+sys.path.append('/home/agurpide/scripts/pythonscripts/maxime_project/muse_project/')
 import argparse
 import numpy as np
-
+import matplotlib.pyplot as plt
 from mpdaf.obj import Image
 
 import bpt_config as bptcfg
@@ -21,13 +22,9 @@ from mappings_utils import shock_model
 
 '''
 This script compares the current results of the MAPPINGSV shock table database to BPT diagrams
-
-for now we keep a single model (default: Gutkin) and a single density (default: 1/cm^3) per iteration to ensure visibility. 
-
+for now we keep a single model (default: Gutkin) and a single density (default: 1/cm^3) per iteration to ensure visibility.
 The Gutkin model is the only one available for now (see mappings_utils).
-
 The carbon to dust ratio for the Gutkin model is fixed to high.
-
 The range of shock speed displayed can be modified. The default is 100-250 km/s
 Note that the Gutkin model ranges from 100 to 1000 km/s in steps of 25.
 '''
@@ -43,7 +40,7 @@ ap.add_argument("-d", "--density", nargs='?', help="density to use in per cubic 
 ap.add_argument("-vmin", "--minspeed", nargs='?', help="minimal shock speed velocity to be displayed", type=float,default=100)
 ap.add_argument("-vmax", "--maxspeed", nargs='?', help="max shock speed velocity to be displayed", type=float,default=250)
 args = ap.parse_args()
-
+plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
 #renaming arguments
 outdir=args.outdir
 if not os.path.isdir(outdir):
@@ -65,29 +62,24 @@ shock_tables=shock_model(model)
 
 #getting the abundances and their solar fraction
 abunds=shock_tables.abund_float
-abunds_frac=abunds/0.01524
-
+solar_abund = 0.01524
 # use_pos=np.where((abunds_frac<=1) & (abunds_frac>0.01))
 #instead of the line above we restrict manually to a few values for less overlap
 use_pos=np.array([4,7,10])
 abunds_use=abunds[use_pos]
 
 #creating the labels which we will use for the grids
-labels_use0=np.array([r"$Z_{ISM}$ = "]*len(abunds_use))
-labels_use1=np.char.add(abunds_use.astype(str),np.array([' i.e. ']*len(abunds_use)))
-labels_use2=np.char.add(abunds_frac.round(decimals=3)[use_pos].astype(str),np.array([r" $Z_\odot$"]*len(abunds_use)))
-labels_use=np.char.add(labels_use1,labels_use2)
-labels_use=np.char.add(labels_use0,labels_use)
+labels_use = np.array([r"$Z_{ISM}$ = %.3f i.e. %.3f $Z_\odot$" % (abund, abund / solar_abund) for abund in abunds_use])
 
 #putting the models of interest in an array
 mod_use=np.array([None]*len(abunds_use))
 for i in range(len(abunds_use)):
     #getting the the 2d grids for the abundance, with the correct density
     mod_use[i]=shock_tables.abund_single(abunds_use[i]).ctd_high.d_lgrid(dens)
-    
+
     #restricting the shock velocity to the ones inputted
     mod_use[i]=mod_use[i][mod_use[i]['shck_vel'].isin(speeds)]
-    
+
 title="BPT compared to a range of "+model+" shock models, with n="+str(dens)+" cm$^{-3}$ and shock speeds in ["+str(vmin)+","+str(vmax)+"] km/s"
 
 #computations
@@ -96,9 +88,9 @@ logy = np.log10(ymap.data.data)
 colormap = ["Blues", "Greens", "Purples", "Oranges"]
 
 for i, ratiomap in enumerate(lineratiomaps):
-    
+
     bpt_type = i + 1
-    bpt_fits, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions, args.contours, bpt_type, colormap,title=title,
+    bpt_fits, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions, args.contours, bpt_type, colormap,
                                                 shock_mods=mod_use,mod_labels=labels_use,figsize='big',bpt_labels=False)
 
     outfile = "%s/mapV_bpt%d_d%d.png" % (outdir, bpt_type,dens)
