@@ -44,15 +44,15 @@ class BPT_diagram:
         self.index = index
 
         if self.index in [1,2,3]:
-            
+
             #region names
             self.region_names=["Star Formation","Int.","AGN","LI(N)ER"]
-            
+
             #titles for graphs
             self.y_axis="log([OIII]/H$_\\beta$)"
             #column names for mappings tables
             self.y_column='OIII_Hb'
-            
+
             if self.index == 1:
                 self.x_axis="log([NII]/H$_\\alpha$)"
                 self.x_column='NII_Ha'
@@ -68,9 +68,9 @@ class BPT_diagram:
                 self.x_column='OI_Ha'
                 self.agnliner_inter = (-0.9, 0.3)
                 self.int_inter = (-0.25, 0.65)
-            
+
         if self.index=='proj':
-            
+
             self.region_names=["dyn. cool","Int.","dyn. warm"]
 
             self.x_axis="P1 (0.77*N2+0.54*S2+0.33*R3)"
@@ -102,16 +102,16 @@ class BPT_diagram:
 
     def proj_x(self,logN2,logS2,logR3):
         return 0.77 * logN2 + 0.54 * logS2 + 0.33* logR3
-    
+
     def proj_y(self,logN2,logS2):
         return -0.57*logN2+0.82*logS2
-    
+
     def cold_projcrv(self,logy):
         return 2.597 * logy**3 - 1.865 * logy**2 + 0.105 * logy - 0.435
-    
+
     def warm_projcrv(self,logy):
         return 3.4 * logy**3 - 2.233 * logy**2 - 0.184* logy - 0.172
-    
+
 
 def plot_bpt_map(image, colormap=ListedColormap(["blue", "green", "pink", "orange"]), outfile="bpt_image.png", regions=None, contours=None):
     """ Create plot of the BPT diagram map
@@ -156,7 +156,7 @@ def plot_bpt_map(image, colormap=ListedColormap(["blue", "green", "pink", "orang
 def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=None, shock_mods=None, mod_labels=None,figsize=None,bpt_labels=False):
 
     x_axis_map = fits.open(map_1)
-    
+
     print("WARNING: values below -1.0 for  [OIII]/Hb are beign ignored")
     logy[np.where(logy < -1.0)] = np.nan
 
@@ -173,49 +173,49 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
         figure, ax = plt.subplots(1)
     elif figsize=='big':
         figure, ax = plt.subplots(1,figsize=(10,8))
-        
+
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
     out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.05
     out_y=abs(np.nanmax(logy)-np.nanmin(logy)) * 0.05
     ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
     ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
-    
+
     if title is not None:
         figure.suptitle(title)
-    
+
     if grid_ax is not None:
         grid_ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
         grid_ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
-        
+
     #introducing the BPT class for the axis names, limits, and curves
     bpt_diagram = BPT_diagram(bptype)
-        
+
     # defining each region:
     #separations first
     pure_starform = bpt_diagram.pure_starform_crv(logx)
     int_curve = bpt_diagram.int_crv(logy)
     agnliner_curve = bpt_diagram.agnliner_crv(logx)
-    
+
     #then the starforming region
     starform_regions = np.where(logy < bpt_diagram.pure_starform_crv(logx))
     bpt_data[starform_regions] = logx[starform_regions] + logy[starform_regions]
     bpt_indexes[starform_regions] = 0
-    
+
     #the intermediaite region
     int_regions = np.where((logy > pure_starform) & (logx < int_curve))
     bpt_data[int_regions] = logx[int_regions] + logy[int_regions]
     bpt_indexes[int_regions] = 1
-    
+
     #the agn region
     agn_regions = np.where((logx > int_curve) & (logy > agnliner_curve))
     bpt_data[agn_regions] = logx[agn_regions] + logy[agn_regions]
     bpt_indexes[agn_regions] = 2
-    
+
     #and the liner region
     liner_regions = np.where((logx > int_curve) & (logy < agnliner_curve))
     bpt_data[liner_regions] = logx[liner_regions] + logy[liner_regions]
     bpt_indexes[liner_regions] = 3
-    
+
     #the pixels of too low SNR stay at nan values to ensure white plotting in the maps
     bpt_data[invalid_pixels] = np.nan
     bpt_indexes[invalid_pixels] = np.nan
@@ -223,7 +223,11 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
     #plotting the separations of the three curves
     #first one
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
-    ax.plot(inter_starform[np.where(inter_starform < 0.360)], bpt_diagram.pure_starform_crv(inter_starform[np.where(inter_starform < 0.360)]), color="black", zorder=100)
+    if bptype == 3:
+        range = inter_starform[np.where(inter_starform < -0.360)]
+    else:
+        range = inter_starform
+    ax.plot(range, bpt_diagram.pure_starform_crv(range), color="black", zorder=100)
 
     #second one
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
@@ -235,28 +239,28 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
     agnliner_def = np.sort(agnliner_def[agnliner_def < bpt_diagram.agnliner_inter[1]])
     # zorder 100 so it stands above the points
     ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
-    
+
     #array for the newly created regions
     regions = [starform_regions, int_regions, agn_regions, liner_regions]
-    
+
     #mapping models plotting if inputted
     if shock_mods is not None:
         plot_shock_mod(shock_mods,ax,bpt_diagram,mod_labels)
-            
+
     #setting the axis names for the main graphs (after the mapping models to superseed the axis names)
     ax.set_xlabel(bpt_diagram.x_axis)
     ax.set_ylabel(bpt_diagram.y_axis)
-    
+
     #and other graphs if needed
     if grid_ax is not None:
         grid_ax.set_xlabel(bpt_diagram.x_axis)
-        
+
     #plotting the separations in a supplementary graph if inputted
     if grid_ax is not None:
         grid_ax.plot(inter_starform, bpt_diagram.pure_starform_crv(inter_starform), color="black", zorder=100)
         grid_ax.plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
         grid_ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
-        
+
     # ploting the regions in the maps
     for i, (map, region) in enumerate(zip(colormap, regions)):
         if bpt_data[region].size == 0:
@@ -270,7 +274,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
                             label=bpt_diagram.region_names[i] if bpt_labels==True else '')
     ax.legend()
     bpt_fits = fits.PrimaryHDU(data=bpt_data, header=x_axis_map[0].header)
-    
+
     if "WCSAXES" in bpt_fits.header:
         if bpt_fits.header["WCSAXES"] == 3:
             bpt_fits.header["WCSAXES"] = 2
@@ -282,7 +286,7 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None,figsize=
     N2_map= fits.open(map_N2)
     S2_map= fits.open(map_S2)
     R3_map= fits.open(map_R3)
-    
+
     logN2=np.log10(N2_map[0].data)
     logS2=np.log10(S2_map[0].data)
     logR3=np.log10(R3_map[0].data)
@@ -298,66 +302,66 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None,figsize=
         figure, ax = plt.subplots(1)
     elif figsize=='big':
         figure, ax = plt.subplots(1,figsize=(10,8))
-    
+
     if title is not None:
         figure.suptitle(title)
 
     bpt_diagram = BPT_diagram('proj')
-    
+
     #defining x and y for the projection according to the curves written in the class
     logx=bpt_diagram.proj_x(logN2, logS2, logR3)
     logy=bpt_diagram.proj_y(logN2, logS2)
-    
+
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
     out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.05
     out_y=abs(np.nanmax(logy)-np.nanmin(logy)) * 0.05
-    
+
     ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
     ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
-    
+
     if grid_ax is not None:
         grid_ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
         grid_ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
-        
+
     ax.set_xlabel(bpt_diagram.x_axis)
     ax.set_ylabel(bpt_diagram.y_axis)
-    
+
     if grid_ax is not None:
         grid_ax.set_xlabel(bpt_diagram.x_axis)
 
     # defining each region
-    
+
     cold_regions=np.where(logx<bpt_diagram.cold_projcrv(logy))
     int_regions=np.where((logx>bpt_diagram.cold_projcrv(logy)) & (logx<bpt_diagram.warm_projcrv(logy)))
     warm_regions=np.where(logx>bpt_diagram.warm_projcrv(logy))
-    
+
     bpt_data[cold_regions] = logx [cold_regions] + logy [cold_regions]
     bpt_indexes[cold_regions] = 0
-    
+
     bpt_data[int_regions] = logx [int_regions] + logy [int_regions]
     bpt_indexes[int_regions] = 1
-    
+
     bpt_data[warm_regions] = logx [warm_regions] + logy [warm_regions]
     bpt_indexes[warm_regions] = 2
-    
+
     bpt_data[invalid_pixels] = np.nan
     bpt_indexes[invalid_pixels] = np.nan
-    
+
     #plotting the separations
     logy_arr=np.sort(np.reshape(logy,np.size(logy)))
-    
+
     #cold-int
     ax.plot(bpt_diagram.cold_projcrv(logy_arr),logy_arr,color="black",zorder=1000)
 
     #int-warm
     ax.plot(bpt_diagram.warm_projcrv(logy_arr),logy_arr,color="black",zorder=1000)
-    
+
     regions = [cold_regions, int_regions, warm_regions]
 
     if grid_ax is not None:
         grid_ax.plot(bpt_diagram.cold_projecrv(logy_arr),logy_arr,color="black",zorder=1000)
         grid_ax.plot(bpt_diagram.warm_projecrv(logy_arr),logy_arr,color="black",zorder=1000)
-        
+
     # ploting the regions
     for i, (map, region) in enumerate(zip(colormap, regions)):
         if bpt_data[region].size == 0:
@@ -369,7 +373,7 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None,figsize=
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
     ax.legend()
-    
+
     bpt_fits = fits.PrimaryHDU(data=bpt_data, header=N2_map[0].header)
     if "WCSAXES" in bpt_fits.header:
         if bpt_fits.header["WCSAXES"] == 3:
@@ -381,7 +385,7 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
 
     '''computations - No change from bpt_single'''
     '''probably needs to be updated'''
-    
+
     x_axis_map = fits.open(map_1)
     y_axis_map = fits.open(map_2)
 
@@ -419,7 +423,7 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
     bpt_data[int_regions] = int_region.index
 
     agn_regions = np.where((logx > int_curve) & (logy>agnliner_curve))
-    
+
     bpt_data[agn_regions] = agn_region.index
 
     liner_regions=np.where((logx>int_curve) & (logy<agnliner_curve))
@@ -430,7 +434,7 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
     #computing the separations
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
     inter_starform=inter_starform[inter_starform<bpt_diagram.pure_starform_max]
-    
+
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
     inter_def = np.sort(inter_def[inter_def< bpt_diagram.int_inter[1]])
 
@@ -446,39 +450,39 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
     for i in range(len(regslist)):
         if np.size(regslist[i])>=1:
             graph_list.append(i)
-    
+
     figure_geo=np.array([None]*len(graph_list))
     ax_geo=np.array([[None]*2]*len(graph_list))
-    
+
     for i in graph_list:
-        
+
         #we first create an elevation map according to the distance to the central pixel, which will be the
         #basis for the colormap
-        
+
         array_geo=np.copy(logx)
         cmap_geo=color_geo
 
         for j in range(np.size(logx,0)):
             for k in range(np.size(logx,1)):
                 array_geo[j][k]=100-(abs(j-np.size(logx,0)/2)**2+abs(k-np.size(logx,0)/2)**2)**(1/2)
-              
+
         #this 1d variable is for the scatter_plot
         array_geo_scat=array_geo[bpt_data == regions[i].index]
- 
+
         #this 2d map is for the map plot
         array_geo_map=np.where(bpt_data==regions[i].index,array_geo,np.nan)
-    
+
         #same process than plot_bpt_map here, but we don't use the function since we plot the figures
         #together
         y_axis_map[0].data = array_geo_map
-        
+
         if 'WCSAXES' in y_axis_map[0].header:
             if y_axis_map[0].header["WCSAXES"] == 3:
                 y_axis_map[0].header["WCSAXES"] = 2
-                
+
         y_axis_map[0].header['COMMENT'] = "BPT diagram geometry %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
         outfile = "%s/BPT_%d_geo_%d.fits" % (out, bptype,i)
-    
+
         y_axis_map.writeto(outfile, overwrite=True)
 
         img = Image(outfile)
@@ -489,56 +493,56 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
         subplot (note : it's not possible to do this the otherway because add_subplot doesn't take subplot_kw
         as an argument)
         '''
-        
+
         figure_geo[i], ax_geo[i] = plt.subplots(1,2,figsize=(16,8),subplot_kw={'projection': img.wcs.wcs})
-        
+
         ax_geo[i][0].remove()
         ax_geo[i][0]=figure_geo[i].add_subplot(1,2,1)
-        
+
         figure_geo[i].suptitle('BPT geometry for the '+regions[i].name+' region in the BPT diagram '+str(bptype))
-        
+
         logx_singreg=logx[bpt_data == regions[i].index]
         logy_singreg=logy[bpt_data == regions[i].index]
-        
+
         #since the curves lead to wrong auto plot adjustments, we do it ourselves
         out_x=abs(np.nanmax(logx_singreg)-np.nanmin(logx_singreg)) * 0.05
         out_y=abs(np.nanmax(logy_singreg)-np.nanmin(logy_singreg)) * 0.05
-        
+
         ax_geo[i][0].set_xlim(np.nanmin(logx_singreg)-out_x,
                               np.nanmax(logx_singreg)+out_x)
         ax_geo[i][0].set_ylim(np.nanmin(logy_singreg)-out_y,
                               np.nanmax(logy_singreg)+out_y)
-        
+
         ax_geo[i][0].set_ylabel("log([OIII]/H$_\\beta$)",fontsize=12)
-        
+
         #definition of the curve parameters depending on the diagram type
         if bptype == 1:
-    
+
             ax_geo[i][0].set_xlabel("log([NII]/H$_\\alpha$)",fontsize=12)
-    
+
         if bptype == 2:
-    
+
             ax_geo[i][0].set_xlabel("log([SII]/H$_\\alpha$)",fontsize=12)
-    
+
         if bptype == 3:
-    
+
             ax_geo[i][0].set_xlabel("log([OI]/H$_\\alpha$)",fontsize=12)
-        
+
         ax_geo[i][1].set_xlabel('Ra', labelpad=0)
         ax_geo[i][1].set_ylabel('Dec', labelpad=-2)
-        
+
         #plots for the first subplot
         ax_geo[i][0].plot(inter_starform, bpt_diagram.pure_starform_crv(inter_starform), color="black", zorder=100)
         ax_geo[i][0].plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
         ax_geo[i][0].plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
-    
+
         ax_geo[i][0].scatter(logx_singreg,logy_singreg,c=array_geo_scat, cmap=cmap_geo,ls="None", marker="+", label=regions[i].name)
-        ax_geo[i][0].legend()  
-        
+        ax_geo[i][0].legend()
+
         #plots for the second subplot
-        img.plot(ax=ax_geo[i][1], scale='linear', show_xlabel=False, show_ylabel=False, cmap=cmap_geo, 
+        img.plot(ax=ax_geo[i][1], scale='linear', show_xlabel=False, show_ylabel=False, cmap=cmap_geo,
                    extent=None)
-        
+
         if conts is not None:
             ctrs = fits.open(conts)
             min_data = np.nanpercentile(ctrs[0].data, 10)
@@ -546,11 +550,11 @@ def bpt_geometry(map_1, map_2, out, bptype, regs=None,conts=None,color_geo='plas
             levels = np.linspace(min_data, max_data, 4)
             cmp = ListedColormap(["black"])
             ax_geo[i][1].contour(ctrs[0].data, levels=levels, alpha=0.6, origin="lower", cmap=cmp)
-    
+
         if regs is not None:
             for reg in regs:
                 mu.plot_regions(reg, ax_geo[i][1], img.data_header)
 
         outfile_png = "%s/BPT_%d_geo_%d.png" % (out, bptype,i)
-        
+
         figure_geo[i].savefig(outfile_png, format="png", bbox_inches="tight", pad_inches=0.4)
