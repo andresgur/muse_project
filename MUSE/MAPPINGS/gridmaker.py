@@ -96,7 +96,7 @@ for k in range(3):
                                         FROM shock_params 
                                         INNER JOIN emis_VI ON emis_VI.ModelID=shock_params.ModelID
                                         INNER JOIN abundances ON abundances.AbundID=shock_params.AbundID
-                                        WHERE emis_VI.model_type='shock'
+                                        WHERE emis_VI.model_type='"""+model_types[k]+"""'
                                         AND shock_params.ref='"""+models[i]+"""'
                                         AND abundances.name='"""+abunds[i][j]+"""'
                                         ORDER BY preshck_dens, mag_fld, shck_vel;""", con=db)
