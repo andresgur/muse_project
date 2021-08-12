@@ -81,8 +81,8 @@ def plot_shock_mod(models,axis,BPT,labels):
     for i in range(len(models)):    
         curr_map_model=models[i]
         plot_dgrid(curr_map_model,axis,BPT,col_vars[i],labels[i])
-            
-def shock_model(modelname):
+
+def shock_model(modelname,modeltype):
       
     """
     General function for the MAPPINGSV models, which uses the tables from the 3mdb database downloaded with gridmaker.
@@ -97,6 +97,11 @@ def shock_model(modelname):
             -'cut' for Allen2008-cut
             -'Gutkin' for Gutkin16
         
+    modeltype: str
+        Gives which types of model you're interested in. 
+        -'shock' for shock only
+        -'precursor' for precursor only
+        -'shock_plus_precursor' for both
     Arguments
     ---------
     csv: csv array
@@ -113,7 +118,8 @@ def shock_model(modelname):
     
     #tables directory
     currdir=os.getcwd()
-    os.chdir(shock_database_path)
+    
+    os.chdir(shock_database_path+modeltype)
     
     #getting all the model files corresponding to this model name
     if 'Allen' in modelname or '2008' in modelname and 'cut' not in modelname:
@@ -277,3 +283,17 @@ def shock_model(modelname):
     #returning to the initial directory
     os.chdir(currdir)
     return shock_mod()
+
+def all_model(modelname):
+    '''
+    wrapper to include all three model types (shock, precursor, shock+precursor) in a single class
+    '''
+    
+    class all_mod:
+        def __init__(self):
+            self.s=shock_model(modelname,'shock')
+            self.p=shock_model(modelname,'precursor')
+            self.sp=shock_model(modelname,'shock_plus_precursor')
+    return all_mod()
+        
+    
