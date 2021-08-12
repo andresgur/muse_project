@@ -76,46 +76,52 @@ abunds_str=abunds.copy()
 abunds_str[3]=np.core.defchararray.add('Allen2008-cut_',np.array(['Dopita2005','LMC','SMC','Solar','TwiceSolar']))
 abunds_str[2]=np.array(['Alarie19s_3MdB-PNe2014-solar'])
 
-for i in range(len(models)):
-    if i<2:
-        for j in range(len(abunds[i])):
-            
-            # SQL request with Pandas
-            curr_csv = pd.read_sql("""SELECT   shock_params.preshck_dens AS dens,
-                                             shock_params.mag_fld AS mag_fld,
-                                             shock_params.shck_vel AS shck_vel, 
-                                             emis_VI.OIII_5007/emis_VI.HI_4861 AS OIII_Hb,
-                                             emis_VI.NII_6583/emis_VI.HI_6563 AS NII_Ha,
-                                            (emis_VI.SII_6716+emis_VI.SII_6716)/emis_VI.HI_6563 AS SII_Ha,
-                                             emis_VI.OI_6300/emis_VI.HI_6563 AS OI_Ha
-                                    FROM shock_params 
-                                    INNER JOIN emis_VI ON emis_VI.ModelID=shock_params.ModelID
-                                    INNER JOIN abundances ON abundances.AbundID=shock_params.AbundID
-                                    WHERE emis_VI.model_type='shock'
-                                    AND shock_params.ref='"""+models[i]+"""'
-                                    AND abundances.name='"""+abunds[i][j]+"""'
-                                    ORDER BY preshck_dens, mag_fld, shck_vel;""", con=db)
-                                    
-            curr_csv.to_csv(r'./'+abunds_str[i][j]+'.php',sep='\t',mode='w+',index=False)
-    else:
-        for j in range(len(abunds[i])):
-            
-            # SQL request with Pandas
-            curr_csv = pd.read_sql("""SELECT   shock_params.preshck_dens AS dens,
-                                             shock_params.mag_fld AS mag_fld,
-                                             shock_params.shck_vel AS shck_vel,
-                                             shock_params.time AS time, 
-                                             shock_params.distance AS distance,
-                                             emis_VI.OIII_5007/emis_VI.HI_4861 AS OIII_Hb,
-                                             emis_VI.NII_6583/emis_VI.HI_6563 AS NII_Ha,
-                                            (emis_VI.SII_6716+emis_VI.SII_6716)/emis_VI.HI_6563 AS SII_Ha,
-                                             emis_VI.OI_6300/emis_VI.HI_6563 AS OI_Ha
-                                    FROM shock_params 
-                                    INNER JOIN emis_VI ON emis_VI.ModelID=shock_params.ModelID
-                                    INNER JOIN abundances ON abundances.AbundID=shock_params.AbundID
-                                    WHERE emis_VI.model_type='shock'
-                                    AND shock_params.ref='"""+models[i]+"""'
-                                    AND abundances.name='"""+abunds[i][j]+"""'
-                                    ORDER BY preshck_dens, mag_fld, shck_vel, time, distance;""", con=db)
-                                    
-            curr_csv.to_csv(r'./'+abunds_str[i][j]+'.php',sep='\t',mode='w+',index=False)
+model_types=['shock','precursor','shock_plus_precursor']
+
+for k in range(3):
+    os.mkdir(model_types[k])
+    os.chdir(model_types[k])
+    for i in range(len(models)):
+        if i<2:
+            for j in range(len(abunds[i])):
+                
+                # SQL request with Pandas
+                curr_csv = pd.read_sql("""SELECT   shock_params.preshck_dens AS dens,
+                                                 shock_params.mag_fld AS mag_fld,
+                                                 shock_params.shck_vel AS shck_vel, 
+                                                 emis_VI.OIII_5007/emis_VI.HI_4861 AS OIII_Hb,
+                                                 emis_VI.NII_6583/emis_VI.HI_6563 AS NII_Ha,
+                                                (emis_VI.SII_6716+emis_VI.SII_6716)/emis_VI.HI_6563 AS SII_Ha,
+                                                 emis_VI.OI_6300/emis_VI.HI_6563 AS OI_Ha
+                                        FROM shock_params 
+                                        INNER JOIN emis_VI ON emis_VI.ModelID=shock_params.ModelID
+                                        INNER JOIN abundances ON abundances.AbundID=shock_params.AbundID
+                                        WHERE emis_VI.model_type='shock'
+                                        AND shock_params.ref='"""+models[i]+"""'
+                                        AND abundances.name='"""+abunds[i][j]+"""'
+                                        ORDER BY preshck_dens, mag_fld, shck_vel;""", con=db)
+                                        
+                curr_csv.to_csv(r'./'+abunds_str[i][j]+'.php',sep='\t',mode='w+',index=False)
+        else:
+            for j in range(len(abunds[i])):
+                
+                # SQL request with Pandas
+                curr_csv = pd.read_sql("""SELECT   shock_params.preshck_dens AS dens,
+                                                 shock_params.mag_fld AS mag_fld,
+                                                 shock_params.shck_vel AS shck_vel,
+                                                 shock_params.time AS time, 
+                                                 shock_params.distance AS distance,
+                                                 emis_VI.OIII_5007/emis_VI.HI_4861 AS OIII_Hb,
+                                                 emis_VI.NII_6583/emis_VI.HI_6563 AS NII_Ha,
+                                                (emis_VI.SII_6716+emis_VI.SII_6716)/emis_VI.HI_6563 AS SII_Ha,
+                                                 emis_VI.OI_6300/emis_VI.HI_6563 AS OI_Ha
+                                        FROM shock_params 
+                                        INNER JOIN emis_VI ON emis_VI.ModelID=shock_params.ModelID
+                                        INNER JOIN abundances ON abundances.AbundID=shock_params.AbundID
+                                        WHERE emis_VI.model_type='"""+model_types[k]+"""'
+                                        AND shock_params.ref='"""+models[i]+"""'
+                                        AND abundances.name='"""+abunds[i][j]+"""'
+                                        ORDER BY preshck_dens, mag_fld, shck_vel, time, distance;""", con=db)
+                                        
+                curr_csv.to_csv(r'./'+abunds_str[i][j]+'.php',sep='\t',mode='w+',index=False)
+    os.chdir('..')
