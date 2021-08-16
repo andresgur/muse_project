@@ -89,7 +89,7 @@ wcs_update infile=$chandra_asol transformfile=$out_dir/$match_out outfile=$out_d
 
 echo "Updating wcs header in $corrected_out"
 
-wcs_update infile=$corrected_out transformfile=$out_dir/$match_out outfile="" verbose=2 clobber=yes
+wcs_update infile=$chandra_ev transformfile=$out_dir/$match_out outfile=$corrected_out verbose=2 clobber=yes
 
 echo "Updating wcs header for detect sources output"
 
