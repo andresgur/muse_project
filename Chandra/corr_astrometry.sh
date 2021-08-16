@@ -85,11 +85,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
  
 echo "Updating asol file...$out_dir/$asol_out"
 
-wcs_update infile=$chandra_asol transformfile=$out_dir/$match_out outfile=$out_dir/$asol_out clobber=yes wcsfile=$chandra_ev verbose=1
+wcs_update infile=$chandra_asol transformfile=$out_dir/$match_out outfile=$out_dir/$asol_out clobber=yes verbose=1
 
 echo "Updating wcs header in $corrected_out"
 
-wcs_update infile=$corrected_out transformfile=$out_dir/$match_out outfile="" verbose=2 clobber=yes wcsfile=$chandra_ev
+wcs_update infile=$corrected_out transformfile=$out_dir/$match_out outfile="" verbose=2 clobber=yes
 
 echo "Updating wcs header for detect sources output"
 
@@ -100,7 +100,7 @@ for band in "${arr[@]}" ; do
 	for file in $(ls *$band*\.fits)
 		 do echo "Updating WCS header $file"
 		 dmcopy $file $out_dir/$file op=all clobber=yes
-		 wcs_update infile=$out_dir/$file transformfile=$out_dir/$match_out outfile="" verbose=2 clobber=yes wcsfile=$chandra_ev
+		 wcs_update infile=$out_dir/$file transformfile=$out_dir/$match_out outfile="" verbose=2 clobber=yes
 		 # update region files using ds9 (seems not to be working anymore :()
 		 ds9 $corrected_out -regions sources_$band.reg -regions system wcs -regions save $out_dir/sources_$band\_fk5.reg -exit
 		 done
