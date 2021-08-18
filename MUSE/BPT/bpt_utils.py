@@ -43,31 +43,32 @@ class BPT_diagram:
     def __init__(self, index):
         self.index = index
 
-        if self.index in [1,2,3]:
+        #region names
+        self.region_names=["Star Formation","Int.","AGN","LI(N)ER"]
 
-            #region names
-            self.region_names=["Star Formation","Int.","AGN","LI(N)ER"]
+        #titles for graphs
+        self.y_axis="log([OIII]/H$_\\beta$)"
+        #column names for mappings tables
+        self.y_column='OIII_Hb'
 
-            #titles for graphs
-            self.y_axis="log([OIII]/H$_\\beta$)"
-            #column names for mappings tables
-            self.y_column='OIII_Hb'
-
-            if self.index == 1:
-                self.x_axis="log([NII]/H$_\\alpha$)"
-                self.x_column='NII_Ha'
-                self.agnliner_inter = (-0.24, 0.5)
-                self.int_inter = (-0.61, 1)
-            elif self.index == 2:
-                self.x_axis="log([SII]/H$_\\alpha$)"
-                self.x_column='SII_Ha'
-                self.agnliner_inter = (-0.22, 0.3)
-                self.int_inter = (-1.1, 1)
-            elif self.index == 3:
-                self.x_axis="log([OI]/H$_\\alpha$)"
-                self.x_column='OI_Ha'
-                self.agnliner_inter = (-0.9, 0.3)
-                self.int_inter = (-0.25, 0.65)
+        if self.index == 1:
+            self.x_axis="log([NII]/H$_\\alpha$)"
+            self.x_column='NII_Ha'
+            self.agnliner_inter = (-0.24, 0.5)
+            self.int_inter = (-0.61, 1)
+            self.limit = -0.032
+        elif self.index == 2:
+            self.x_axis="log([SII]/H$_\\alpha$)"
+            self.x_column='SII_Ha'
+            self.agnliner_inter = (-0.22, 0.3)
+            self.int_inter = (-1.1, 1)
+            self.limit = 0.198
+        elif self.index == 3:
+            self.x_axis="log([OI]/H$_\\alpha$)"
+            self.x_column='OI_Ha'
+            self.agnliner_inter = (-0.9, 0.3)
+            self.int_inter = (-0.25, 0.65)
+            self.limit = -0.360
 
         if self.index=='proj':
 
@@ -218,7 +219,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
     bpt_indexes[agn_regions] = 2
 
     #and the liner region
-    liner_regions = np.where((logx > int_curve) & (logy < agnliner_curve))
+    liner_regions = np.where((logx > int_curve) & (logy < agnliner_curve) & (logx > pure_starform))
     bpt_data[liner_regions] = logx[liner_regions] + logy[liner_regions]
     bpt_indexes[liner_regions] = 3
 
@@ -229,11 +230,9 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
     #plotting the separations of the three curves
     #first one
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
-    if bptype == 3:
-        range = inter_starform[np.where(inter_starform < -0.360)]
-    else:
-        range = inter_starform
-    ax.plot(range, bpt_diagram.pure_starform_crv(range), color="black", zorder=100)
+    #avoid divergence
+    inter_good_values = inter_starform[np.where(inter_starform < bpt_diagram.limit)]
+    ax.plot(inter_good_values, bpt_diagram.pure_starform_crv(inter_good_values), color="black", zorder=100)
 
     #second one
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
@@ -263,7 +262,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
 
     #plotting the separations in a supplementary graph if inputted
     if grid_ax is not None:
-        grid_ax.plot(inter_starform, bpt_diagram.pure_starform_crv(inter_starform), color="black", zorder=100)
+        grid_ax.plot(inter_good_values, bpt_diagram.pure_starform_crv(inter_good_values), color="black", zorder=100)
         grid_ax.plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
         grid_ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
 
