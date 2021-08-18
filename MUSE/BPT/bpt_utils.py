@@ -175,10 +175,16 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None, title=N
         figure, ax = plt.subplots(1,figsize=(10,8))
 
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
-    out_x=abs(np.nanmax(logx)-np.nanmin(logx)) * 0.05
-    out_y=abs(np.nanmax(logy)-np.nanmin(logy)) * 0.05
-    ax.set_xlim(np.nanmin(logx)-out_x,np.nanmax(logx)+out_x)
-    ax.set_ylim(np.nanmin(logy)-out_y,np.nanmax(logy)+out_y)
+    # if logx is valid but logy is nan, this gave the wrong plot margins, therefore we find the limits of the valid pixels taking into 
+    # account both x and y
+    min_logx = np.nanmin(logx[~((np.isnan(logx)) | (np.isnan(logy)))])
+    max_logx = np.nanmax(logx[~((np.isnan(logx)) | (np.isnan(logy)))])
+    min_logy = np.nanmin(logy[~((np.isnan(logx)) | (np.isnan(logy)))])
+    max_logy = np.nanmax(logy[~((np.isnan(logx)) | (np.isnan(logy)))])
+    out_x=abs(max_logx-min_logx) * offset
+    out_y=abs(max_logy-min_logy) * offset
+    ax.set_xlim(min_logx-out_x,max_logx+out_x)
+    ax.set_ylim(min_logy-out_y,max_logy+out_y)
 
     if title is not None:
         figure.suptitle(title)
