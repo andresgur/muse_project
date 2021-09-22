@@ -6,6 +6,11 @@ from astropy.wcs import WCS
 from astropy.io import fits
 from apt_phot import region_to_aperture as rta
 
+import os
+from mpdaf.obj import Image
+
+os.chdir('/home/mparra/PARRA/Observ/NGC5408/HST/o3_calc')
+
 file_502='ibde04010_drc_F502N.fits'
 file_547='ibde53010_drc_F547N.fits'
 
@@ -61,3 +66,36 @@ fpa=flux_oIII/aa_source
 
 #the output can be used in https://www.eso.org/observing/etc/bin/gen/form?INS.MODE=swspectr+INS.NAME=MUSE 
 #using a gaussian line profile as SED and the first observation setup to get time with the required SNR
+
+#second method : renormalizing with a region with no diffuse emission but a lot of stars
+
+renorm_reg='renorm.reg'
+
+#photometry and ratio computation
+flux_502_renorm=apt_phot(file_502,'renorm.reg',background_reg=None,apt_corr=1)[6]
+flux_547_renorm=apt_phot(file_547,'renorm.reg',background_reg=None,apt_corr=1)[6]
+
+renorm=flux_502_renorm/flux_547_renorm
+
+flux_oIII_renorm=flux_502-flux_547*renorm
+fpa_renorm=flux_oIII_renorm/aa_source
+
+#visual check with MPDAF (which we already know will be imperfect because of the bad star but 
+#the area correction should mostly cover that)
+
+img_502=Image(file_502)
+img_547=Image(file_547)
+
+img_547_derot=img_547.rotate(img_502.get_rot()-img_547.get_rot())
+
+img_547_resampl=img_547_derot.align_with_image(img_502)
+img_547_renorm=img_547_resampl*renorm
+
+img_547_renorm.wcs=img_502.wcs
+img_502_sub=img_502-img_547_renorm
+
+img_502_sub.plot(scale='sqrt')
+
+if os.path.exists('502_sub.fits'):
+    os.system('rm 502_sub.fits')
+img_502_sub.write('502_sub.fits')
