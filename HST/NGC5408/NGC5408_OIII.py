@@ -102,7 +102,7 @@ img_547_renorm.wcs=img_502.wcs
 img_502_sub=img_502-img_547_renorm
 
 #hard to see anything in mpl
-img_502_sub.plot(scale='squared')
+img_502_sub.plot(scale='linear',vmin=-0.5)
 
 if os.path.exists('502_sub.fits'):
     os.system('rm 502_sub.fits')
