@@ -86,15 +86,23 @@ fpa_renorm=flux_oIII_renorm/aa_source
 img_502=Image(file_502)
 img_547=Image(file_547)
 
+#adjusting rotation
 img_547_derot=img_547.rotate(img_502.get_rot()-img_547.get_rot())
 
+#resampling and adjusting eventual residual coordinate offsets
 img_547_resampl=img_547_derot.align_with_image(img_502)
+
+#renormalisation
 img_547_renorm=img_547_resampl*renorm
 
+#doesn't want to substract the images if I don't do this even tho I derotated and aligned IDK why
 img_547_renorm.wcs=img_502.wcs
+
+#substracting the continuum
 img_502_sub=img_502-img_547_renorm
 
-img_502_sub.plot(scale='sqrt')
+#hard to see anything in mpl
+img_502_sub.plot(scale='squared')
 
 if os.path.exists('502_sub.fits'):
     os.system('rm 502_sub.fits')
