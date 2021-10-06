@@ -2,7 +2,7 @@
 # @Date:   19-10-2020
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 22-06-2021
+# @Last modified time: 06-10-2021
 
 import os
 from regions import read_ds9
@@ -11,19 +11,13 @@ from astropy.io import fits
 import argparse
 from numpy import log10, sqrt
 import astropy.units as u
-from astropy.wcs import WCS
+from astropy import wcs
+import logging
 
 
-def region_to_aperture(region, wcs=None):
-    """Convert region object to photutils.aperture.aperture_photometry object. The wcs object is needed only if the input regions are in sky coordinates.
+def region_to_aperture(region):
+    """Convert region object to aperture object."""
 
-    Parameters
-    ----------
-    region: regions.Region
-        Output of read_ds9 method
-    wcs: astropy.wcs.WCS
-        A world coordinate system if the region in sky coordinates IS needed to convert it to pixels.
-    """
     region_type = type(region).__name__
     if "Pixel" in region_type:
         source_center = (region.center.x, region.center.y)
@@ -35,32 +29,32 @@ def region_to_aperture(region, wcs=None):
             # to be tested
             return EllipticalAperture(source_center, a=region.width, b=region.height, theta=region.angle)
     elif "Sky" in region_type:
-        if wcs is None:
-            print("Error, cannot obtain aperture without a wcs.")
-            return None
         center = region.center.fk5
         if region_type == "CircleSkyRegion":
-            return SkyCircularAperture(center, r=region.radius).to_pixel(wcs)
-        elif region_type == "CircleAnnulusSkyRegion":
-            print("Region %s not implemented")
+            return SkyCircularAperture(center, r=region.radius)
         elif region_type == "EllipseSkyRegion":
-            return SkyEllipticalAperture(center, a=region.width, b=region.height, theta=region.angle).to_pixel(wcs)
+            return SkyEllipticalAperture(center, a=region.width, b=region.height, theta=region.angle)
         elif region_type == "CircleAnnulusSkyRegion":
-            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_pixel(wcs)
+            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius)
     else:
-        print("Error region not implemented")
+        TypeError("Error region not implemented")
         return None
 
 
 parser = argparse.ArgumentParser(description='Extracts fluxes from the given apertures.')
-parser.add_argument("images", help="Image files where to look for sources", nargs='+', type=str)
-parser.add_argument("-r", "--regions", type=str, help='Source (first) and background (second) extraction region file to use for the aperture photometry', nargs=1)
+parser.add_argument("images", help="Image files where to extract fluxes", nargs='+', type=str)
+parser.add_argument("-r", "--regions", type=str, help='Source (first) and background (second line, optional) extraction region file to use for the aperture photometry', nargs=1)
 parser.add_argument("-a", "--aperture_correction", type=float, help='Aperture correction (see https://stsci.edu/hst/instrumentation/wfc3/data-analysis/photometric-calibration/uvis-encircled-energy and https://stsci.edu/hst/instrumentation/acs/data-analysis/aperture-corrections)', nargs="?", default=1)
 args = parser.parse_args()
 regions = read_ds9(args.regions[0])
 source_reg = regions[0]
-bkg_reg = regions[1]
-
+source_aperture = region_to_aperture(source_reg)
+# if a background region was given
+if len(regions) > 1:
+    bkg_reg = regions[1]
+    bkg_aperture = region_to_aperture(bkg_reg)
+else:
+    logging.warning("No background was given, no background correction will be performed.")
 for image_file in args.images:
 
     if os.path.isfile(image_file):
@@ -91,16 +85,20 @@ for image_file in args.images:
         print("PHOTFLAM keyword value: %.2E %s" % (photflam.value, photflam.unit))
         zero_point = float(hst_hdul[1].header["PHOTZPT"])
         image_data = hst_hdul[1].data
-        wcs = WCS(hst_hdul[1].header)
-        source_aperture = region_to_aperture(source_reg, wcs)
-        bkg_aperture = region_to_aperture(bkg_reg, wcs)
-        phot_source = aperture_photometry(image_data, source_aperture)
-        phot_bkg = aperture_photometry(image_data, bkg_aperture)
+        hst_wcs = wcs.WCS(hst_hdul[1].header)
+        phot_source = aperture_photometry(image_data, source_aperture, wcs=hst_wcs)
+        if len(regions) > 1:
+            phot_bkg = aperture_photometry(image_data, bkg_aperture, wcs=hst_wcs)
 
         aperture_keyword = "corrected_aperture_sum(%s)" % units
         # background correction
-        phot_source[aperture_keyword] = phot_source["aperture_sum"] - phot_bkg["aperture_sum"] / bkg_aperture.area * source_aperture.area
-        phot_source["corrected_aperture_err"] = sqrt(phot_source["aperture_sum"] + (sqrt(phot_bkg["aperture_sum"]) / bkg_aperture.area * source_aperture.area) ** 2)
+        if len(regions) > 1:
+            phot_source[aperture_keyword] = phot_source["aperture_sum"] - phot_bkg["aperture_sum"] / bkg_aperture.area * source_aperture.area
+            phot_source["corrected_aperture_err"] = sqrt(phot_source["aperture_sum"] + (sqrt(phot_bkg["aperture_sum"]) / bkg_aperture.area * source_aperture.area) ** 2)
+        else:
+            phot_source[aperture_keyword] = phot_source["aperture_sum"]
+            phot_source["corrected_aperture_err"] = sqrt(phot_source["aperture_sum"])
+
         phot_source_conf = phot_source[aperture_keyword] + phot_source["corrected_aperture_err"]
         phot_source_conf_neg = phot_source[aperture_keyword] - phot_source["corrected_aperture_err"]
         counts_at_infinity = phot_source[aperture_keyword] / args.aperture_correction
@@ -132,10 +130,16 @@ for image_file in args.images:
         phot_source["mag"].info.format = "%.2f"
         phot_source["mag_err_neg"].info.format = "%.2f"
         phot_source["mag_err_pos"].info.format = "%.3f"
-
-        phot_source.write("aperture_photometry.csv", overwrite=True)
-        f = open("%s" % (image_file.replace(".fits", "_info.txt")), "w+")
-        f.write("Date:%s\nInstrument:%s\nFilter:%s\nDetector:%s\nExposure(s):%.2f\nPivot wavelength (A):%.1f\nRMS:%.1f\nAperture correction:%.4f\nRadius:%.3f physical units" % (date, instrument, hst_filter, detector, exp_time, pivot_wavelength, filter_bandwidth, args.aperture_correction, source_aperture.r))
+        reg_basename = os.path.basename(args.regions[0]).replace('.reg', '')
+        out_data_file = "aperture_phot_%s.csv" % (reg_basename)
+        phot_source.write(out_data_file, overwrite=True)
+        out_info_file = image_file.replace(".fits", "%s_apt_info.txt" % reg_basename)
+        f = open(out_info_file, "w+")
+        f.write("Date:%s\nInstrument:%s\nFilter:%s\nDetector:%s\nExposure(s):%.2f\nPivot wavelength (A):%.1f\nRMS:%.1f\nAperture correction:%.4f" % (date, instrument, hst_filter, detector, exp_time, pivot_wavelength, filter_bandwidth, args.aperture_correction))
+        aperture_reg = type(source_aperture).__name__
+        attributes = vars(source_aperture)
+        att_list = ''.join("%s: %s" % item for item in attributes.items())
+        f.write("\n###Aperture details###\n%s\n%s" % (aperture_reg, att_list))
         f.close()
         xspec_outfile = image_file.replace(".fits", "_to_xspec.ascii")
         f = open("%s" % ("%s" % xspec_outfile), "w+")
@@ -143,5 +147,6 @@ for image_file in args.images:
         f.close()
         print("Use 'ftflx2xsp infile=%s xunit=angstrom yunit=ergs/cm^2/s/A nspec=1 phafile=hst_%s.fits rspfile=hst_%s.rsp' to convert to XSPEC format" % (xspec_outfile, hst_filter, hst_filter))
         print("Warning: you may need to change the '-' sign in the ascii file for this to work")
+        print("Output stored to %s and %s" % (out_info_file, out_data_file))
         #
         # print some useful info
