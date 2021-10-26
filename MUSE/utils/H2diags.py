@@ -159,15 +159,15 @@ metal_map=metal_file[0].data
 
 if case=='R,3D':
     metal_map=OH_R(ratio_R2,ratio_N2,ratio_R3)
-
+    
 if case=='S,3D':
     metal_map=OH_S(ratio_N2,ratio_S2,ratio_R3)
-
+    
 if case=='R,2D':
-    metal_map=OH_S(ratio_N2,ratio_S2,ratio_R3)
+    metal_map=OH_R_2D(ratio_R2,ratio_S2)
 
 if case=='S,2D':
-    metal_map=OH_S(ratio_N2,ratio_S2,ratio_R3)
+    metal_map=OH_S_2D(ratio_N2,ratio_S2)
 
 if bpt_map[0].data.shape!=metal_map.shape:
     logging.warning("Can't compare the bpt map and the metal map : Their shapes are different.\n"
