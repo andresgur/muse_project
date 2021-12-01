@@ -12,8 +12,9 @@ check_extension.py --> Script to be run after marxsim_script.py has been run to 
 ~~~~~~~~~~~~~~~~~
 ~      HST      ~ 
 ~~~~~~~~~~~~~~~~~
-various Photometry scripts
+aperture_photometry.py --> Script to retrieve magnitudes, fluxes from a given ds9 region (it automatically reads the necessary keywords from the header to perform the corrections). A finite aperture correction is needed for small PSFs. Background subtraction is also possible (must be added a second line in the ds9 region file).
 
+astro_corr.py --> Script to refine the astrometry of several HST images (more than one is possible, and the solution will be global to all of them) using the gaia catalogue. It uses tweakreg https://drizzlepac.readthedocs.io/en/latest/tweakreg.html.
 
 ~~~~~~~~~~~~~~~~~
 ~      MUSE     ~
