@@ -2,43 +2,18 @@
 # @Date:   19-10-2020
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 06-10-2021
+# @Last modified time: 11-12-2021
 
 import os
 from regions import read_ds9
-from photutils.aperture import aperture_photometry, CircularAperture, CircularAnnulus, EllipticalAperture, SkyCircularAperture, SkyCircularAnnulus, SkyEllipticalAperture
+from photutils.aperture import aperture_photometry
 from astropy.io import fits
 import argparse
 from numpy import log10, sqrt
 import astropy.units as u
 from astropy import wcs
 import logging
-
-
-def region_to_aperture(region):
-    """Convert region object to aperture object."""
-
-    region_type = type(region).__name__
-    if "Pixel" in region_type:
-        source_center = (region.center.x, region.center.y)
-        if region_type == 'CirclePixelRegion':
-            return CircularAperture(source_center, r=region.radius)
-        elif region_type == "CircleAnnulusPixelRegion":
-            return CircularAnnulus(source_center, r_in=region.inner_radius, r_out=region.outer_radius)
-        elif region_type == "EllipsePixelRegion":
-            # to be tested
-            return EllipticalAperture(source_center, a=region.width, b=region.height, theta=region.angle)
-    elif "Sky" in region_type:
-        center = region.center.fk5
-        if region_type == "CircleSkyRegion":
-            return SkyCircularAperture(center, r=region.radius)
-        elif region_type == "EllipseSkyRegion":
-            return SkyEllipticalAperture(center, a=region.width, b=region.height, theta=region.angle)
-        elif region_type == "CircleAnnulusSkyRegion":
-            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius)
-    else:
-        TypeError("Error region not implemented")
-        return None
+import hst_utils as hst_ut
 
 
 parser = argparse.ArgumentParser(description='Extracts fluxes from the given apertures.')
@@ -48,11 +23,11 @@ parser.add_argument("-a", "--aperture_correction", type=float, help='Aperture co
 args = parser.parse_args()
 regions = read_ds9(args.regions[0])
 source_reg = regions[0]
-source_aperture = region_to_aperture(source_reg)
+source_aperture = hst_ut.region_to_aperture(source_reg)
 # if a background region was given
 if len(regions) > 1:
     bkg_reg = regions[1]
-    bkg_aperture = region_to_aperture(bkg_reg)
+    bkg_aperture = hst_ut.region_to_aperture(bkg_reg)
 else:
     logging.warning("No background was given, no background correction will be performed.")
 for image_file in args.images:
@@ -60,12 +35,7 @@ for image_file in args.images:
     if os.path.isfile(image_file):
         hst_hdul = fits.open(image_file)
         date = hst_hdul[0].header["DATE-OBS"]
-        if "FILTER" in hst_hdul[0].header:
-            hst_filter = hst_hdul[0].header["FILTER"]
-        elif "FILTNAM1" in hst_hdul[0].header:
-            hst_filter = hst_hdul[0].header["FILTNAM1"]
-        else:
-            hst_filter = hst_hdul[0].header["FILTER1"]
+        hst_filter = hst_ut.get_image_filter(hst_hdul[0].header)
         instrument = hst_hdul[0].header["INSTRUME"]
         units = hst_hdul[1].header["BUNIT"]
         exp_time = float(hst_hdul[0].header["EXPTIME"])
@@ -135,7 +105,7 @@ for image_file in args.images:
         phot_source.write(out_data_file, overwrite=True)
         out_info_file = image_file.replace(".fits", "%s_apt_info.txt" % reg_basename)
         f = open(out_info_file, "w+")
-        f.write("Date:%s\nInstrument:%s\nFilter:%s\nDetector:%s\nExposure(s):%.2f\nPivot wavelength (A):%.1f\nRMS:%.1f\nAperture correction:%.4f" % (date, instrument, hst_filter, detector, exp_time, pivot_wavelength, filter_bandwidth, args.aperture_correction))
+        f.write("Date:%s\nInstrument:%s\nFilter:%s\nDetector:%s\nExposure(s):%.2f\nPivot wavelength (A):%.1f\nRMS:%.1f\nPHOTFLAM:%s\nAperture correction:%.4f" % (date, instrument, hst_filter, detector, exp_time, pivot_wavelength, filter_bandwidth, photflam.value, args.aperture_correction))
         aperture_reg = type(source_aperture).__name__
         attributes = vars(source_aperture)
         att_list = ''.join("%s: %s" % item for item in attributes.items())
