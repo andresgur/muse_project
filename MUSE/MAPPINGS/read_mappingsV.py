@@ -2,7 +2,7 @@
 # @Date:   07-06-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 01-12-2021
+# @Last modified time: 17-12-2021
 
 import argparse
 import numpy as np
@@ -96,7 +96,7 @@ args = parser.parse_args()
 
 style_file = '/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle'
 
-if.os.isfile(style_file):
+if os.path.isfile(style_file):
     plt.style.use(style_file)
 
 bpt_type = bptcfg.type
@@ -107,7 +107,7 @@ figure_bpt2, ax_2 = plt.subplots(1)
 figure_bpt3, ax_3 = plt.subplots(1)
 patches = []
 #speeds = [100.0, 150.0, 200.0, 250.0, 300.0]
-speeds = [100.0, 200.0, 300.0]
+speeds = [100.0, 150, 200.0, 250, 300.0]
 #speeds = [200.0, 225, 250.0, 300.0, 350, 400, 450, 500, 550, 600, 700, 800, 850, 900, 1000]
 markers = mu.get_markers_array(len(speeds))
 if args.type == "s":
