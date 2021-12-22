@@ -2,7 +2,7 @@
 # @Date:   20-05-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 10-08-2021
+# @Last modified time: 22-12-2021
 # Script to compute extinction map
 from astropy.io import fits
 import argparse
@@ -43,7 +43,7 @@ halpha = 6563.0 * u.angstrom
 hbeta = 4861.0 * u.angstrom
 
 outdir = "deredden_momcheva"
-lines = ['OII3727', 'OII3729', 'HBETA', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA']
+lines = ['OII3727', 'OII3729', 'HBETA', 'OI6300', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA']
 
 
 if not os.path.isdir(outdir):
@@ -129,17 +129,20 @@ for line in lines:
                 efluxes[x, y] = np.nan
 
             else:
-                fluxes[x, y] = fluxes[x, y] * 10 ** (0.4 * extincton_curve.evaluate(wavelenghts[x, y] * u.angstrom) * Ebv[x, y])
-                efluxes[x, y] = efluxes[x, y] * 10 ** (0.4 * extincton_curve.evaluate(wavelenghts[x, y] * u.angstrom) * Ebv[x, y])
+                extinction_curve_value = extincton_curve.evaluate(wavelenghts[x, y] * u.angstrom)
+                fluxes[x, y] = fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])
+                efluxes[x, y] = np.sqrt((efluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])) ** 2 + (err_ebv[x, y] * fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y]) * np.log(10**(0.4 * extinction_curve_value)))**2)
     dereddened_fits = fits.PrimaryHDU(data=fluxes, header=fluxes_fits.header)
     dereddened_fits.header['CURVE'] = "%s" % curve
     dereddened_fits.header['R_v'] = "%.1f" % args.ratio
+    dereddened_fits.header['Ratio'] = "%.1f" % args.intrinsic
     dereddened_fits.header['COMMENT'] = "Balmer ratio: %s/%s" % (halpha_file, hbeta_file)
     outfile = fluxmap.replace(".fits", "deredden.fits")
     dereddened_fits.writeto(outfile, overwrite=True)
     edereddened_fits = fits.PrimaryHDU(data=efluxes, header=efluxes_fits.header)
     edereddened_fits.header['CURVE'] = "%s" % curve
     edereddened_fits.header['R_v'] = "%.1f" % args.ratio
+    edereddened_fits.header['Ratio'] = "%.1f" % args.intrinsic
     edereddened_fits.header['COMMENT'] = "Balmer ratio: %s/%s" % (halpha_file, hbeta_file)
     eoutfile = efluxmap.replace(".fits", "deredden.fits")
     edereddened_fits.writeto(eoutfile, overwrite=True)
