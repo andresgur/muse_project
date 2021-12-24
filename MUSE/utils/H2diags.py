@@ -31,29 +31,29 @@ from line_utils import ratio_maker, map_plot
 
 def OH_R(R2,N2,R3):
 
-    OH_RU=8.589+0.022*np.log(R3/R2)+0.399*np.log(N2)+(-0.137+0.164*np.log(R3/R2)+0.589*np.log(N2))*np.log(R2)
-    OH_RL=7.932+0.944*np.log(R3/R2)+0.695*np.log(N2)+(+0.970-0.291*np.log(R3/R2)-0.019*np.log(N2))*np.log(R2)
+    OH_RU=8.589+0.022*np.log10(R3/R2)+0.399*np.log10(N2)+(-0.137+0.164*np.log10(R3/R2)+0.589*np.log10(N2))*np.log10(R2)
+    OH_RL=7.932+0.944*np.log10(R3/R2)+0.695*np.log10(N2)+(+0.970-0.291*np.log10(R3/R2)-0.019*np.log10(N2))*np.log10(R2)
 
-    return np.where(np.log(N2)>=-0.6,OH_RU,OH_RL)
+    return np.where(np.log10(N2)>=-0.6,OH_RU,OH_RL)
 
 def OH_S(N2,S2,R3):
 
-    OH_SU=8.424+0.030*np.log(R3/S2)+0.751*np.log(N2)+(-0.349+0.182*np.log(R3/S2)+0.508*np.log(N2))*np.log(S2)
-    OH_SL=8.072+0.789*np.log(R3/S2)+0.726*np.log(N2)+(+1.069-0.170*np.log(R3/S2)+0.022*np.log(N2))*np.log(S2)
+    OH_SU=8.424+0.030*np.log10(R3/S2)+0.751*np.log10(N2)+(-0.349+0.182*np.log10(R3/S2)+0.508*np.log10(N2))*np.log10(S2)
+    OH_SL=8.072+0.789*np.log10(R3/S2)+0.726*np.log10(N2)+(+1.069-0.170*np.log10(R3/S2)+0.022*np.log10(N2))*np.log10(S2)
 
-    return np.where(np.log(N2)>=-0.6,OH_SU,OH_SL)
+    return np.where(np.log10(N2)>=-0.6,OH_SU,OH_SL)
 
 def OH_R_2D(R2,N2):
 
-    OH_RU_2D=8.589+0.329*np.log(N2)+(-0.205+0.549*np.log(N2))*np.log(R2)
+    OH_RU_2D=8.589+0.329*np.log10(N2)+(-0.205+0.549*np.log10(N2))*np.log10(R2)
 
-    return np.where(np.log(N2)>=-0.6,OH_RU_2D,np.nan)
+    return np.where(np.log10(N2)>=-0.6,OH_RU_2D,np.nan)
 
 def OH_S_2D(N2,S2):
 
-    OH_SU_2D=8.445+0.699*np.log(N2)+(-0.253+0.217*np.log(N2))*np.log(S2)
+    OH_SU_2D=8.445+0.699*np.log10(N2)+(-0.253+0.217*np.log10(N2))*np.log10(S2)
 
-    return np.where(np.log(N2)>=-0.6,OH_SU_2D,np.nan)
+    return np.where(np.log10(N2)>=-0.6,OH_SU_2D,np.nan)
 
 ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type. Separatios based on Law et al. 2021')
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='H2_diags', type=str)
@@ -64,7 +64,7 @@ args = ap.parse_args()
 
 outdir=args.outdir
 
-sdir='/home/agurpide/optical_data/NGC1313/nancleancubes/coordadjusted/'
+sdir='/home/agurpide/optical_data/NGC1313X-1/nancleancubes/coordadjusted/'
 os.chdir(sdir)
 
 '''
@@ -194,7 +194,7 @@ ion_par_file=metal_file.copy()
 
 ion_par_map=ion_par_file[0].data
 
-ion_par_map=U_ion(metal_map/Z_star,np.log(ratio_S2))
+ion_par_map=U_ion(metal_map/Z_star,np.log10(ratio_S2))
 
 ion_par_file[0].data=ion_par_map
 
