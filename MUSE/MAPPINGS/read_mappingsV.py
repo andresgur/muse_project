@@ -2,7 +2,7 @@
 # @Date:   07-06-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 17-12-2021
+# @Last modified time: 26-01-2022
 
 import argparse
 import numpy as np
@@ -281,5 +281,5 @@ ax_3.text(-2, -0.6, "HII", fontsize=20, weight='bold', clip_on=True)
 figure_bpt1.savefig("%s/bpt1%s" % (outdir, outfile))
 figure_bpt2.savefig("%s/bpt2%s" % (outdir, outfile))
 figure_bpt3.savefig("%s/bpt3%s" % (outdir, outfile))
-grid_figure.savefig("%s/grid_fig%s" % (outdir, outfile.replace(".png", ".pdf")), bbox_inches='tight')
+grid_figure.savefig("%s/grid_fig%s" % (outdir, outfile), bbox_inches='tight')
 print("Results stored to %s" % outdir)
