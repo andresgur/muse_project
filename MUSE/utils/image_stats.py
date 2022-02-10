@@ -2,7 +2,7 @@
 # @Date:   22-06-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 11-08-2021
+# @Last modified time: 10-02-2022
 
 import argparse
 from regions import read_ds9
@@ -41,7 +41,10 @@ for image in args.images:
             sum_2 = np.ma.sum(img.data ** 2)
             max = np.ma.max(img.data)
             min = np.ma.min(img.data)
-            area = mu.region_to_aperture(region, img.wcs.wcs).area
+            try:
+                area = mu.region_to_aperture(region, img.wcs.wcs).area
+            except AttributeError:
+                area = 0
             img.unmask()
             # use the name given to the region, otherwise number it
             if "label" in region.meta:
