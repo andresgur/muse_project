@@ -25,7 +25,11 @@ deredden.py --> Script to deredden flux line maps, it needs as input the balmer 
 
 deredden_momcheva.py --> Script to deredden flux line maps based on appendix of http://arxiv.org/abs/1207.5479, it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them (python deredden_momcheva.py -a halpha_path -b hbeta_path -Rv 4.05 -i 2.86). It creates a map of E(B-V) and one with the uncertainty on E(B-V)
 
+----utils----
+
 cutfromregion.py --> Script to cut images from an input region ds9 file.
+
+image_stats.py --> Retrieve statistical information (min, max, mean) of a region or entire image by default
 
 ----MAPPINGS-----
 
