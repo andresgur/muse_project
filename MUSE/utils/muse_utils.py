@@ -2,7 +2,7 @@
 # @Date:   04-04-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 22-06-2021
+# @Last modified time: 09-03-2022
 
 
 # imports
@@ -39,22 +39,21 @@ def region_to_aperture(region, wcs=None):
             return CircularAnnulus(source_center, r_in=region.inner_radius, r_out=region.outer_radius)
         elif region_type == "EllipsePixelRegion":
             # to be tested
-            return EllipticalAperture(source_center, a=region.width, b=region.height, angle=region.angle)
+            return EllipticalAperture(source_center, a=region.width, b=region.height, theta=region.angle)
     elif "Sky" in region_type:
         if wcs is None:
             print("Error, cannot obtain aperture without a wcs.")
             return None
         center = region.center.fk5
         if region_type == "CircleSkyRegion":
-            return SkyCircularAperture(center, r=region.radius).to_sky(wcs)
+            return SkyCircularAperture(center, r=region.radius).to_pixel(wcs)
         elif region_type == "EllipseSkyRegion":
-            return SkyEllipticalAperture(center, a=region.width, b=region.height, angle=region.angle).to_sky(wcs)
+            return SkyEllipticalAperture(center, a=region.width, b=region.height, theta=region.angle).to_pixel(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
-            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_sky(wcs)
+            return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_pixel(wcs)
     else:
         print("Error region not implemented")
         return None
-
 
 
 def read_psf_fits(fits_file, extension=1):
@@ -85,15 +84,19 @@ def get_sky_res(input_mpdaf):
 def region_to_mask(image, region):
     """Creates a mask out of a region file. Masks everything outside the region.
     Parameters:
-    fits : astropy.io.fits
-        The fits file you want to create the mask for (Cube or Image)
+    fits : astropy.io.fits.ImageHDU or mpdaf.obj.Image
+        The fits HDU corresponding to an image or in mpdaf.obj.Image
     region : str
         The region file with which you want to create the mask (path)
     returns a ndarray with 0 for masked values and 1 for non-masked values
     """
     mask_region = pyregion.open(region)
+    print("Mask region: ")
     print(mask_region)
-    mask = mask_region.get_mask(hdu=image.get_data_hdu())
+    try:
+        mask = mask_region.get_mask(hdu=image)
+    except AttributeError:
+        mask = mask_region.get_mask(hdu=image.get_data_hdu())
     mask = ~mask
     return mask
 
