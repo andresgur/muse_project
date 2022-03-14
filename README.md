@@ -30,6 +30,7 @@ deredden_momcheva.py --> Script to deredden flux line maps based on appendix of 
 cutfromregion.py --> Script to cut images from an input region ds9 file.
 
 image_stats.py --> Retrieve statistical information (min, max, mean) of a region or entire image by default
+image_stats.py image.fits -region ds9reigonfile.reg
 
 ----MAPPINGS-----
 
@@ -40,9 +41,3 @@ read_mappingsV.py --> Script to obtain predicted line ratios from the mapping V 
 -------BPT-------
 
 bpt_newer.py -> bpt diagram from Law et al. 2021, now with geometry
-
-~~~~~~~~~~~~~~~~~
-~      Misc     ~
-~~~~~~~~~~~~~~~~~
-image_stats.py --> Script to obtain some stats from a particular region of an image (python image_stats.py image.fits -region ds9reigonfile.reg
-
