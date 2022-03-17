@@ -2,7 +2,7 @@
 # @Date:   19-10-2020
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 11-12-2021
+# @Last modified time: 17-03-2022
 
 import os
 from regions import read_ds9
@@ -101,7 +101,7 @@ for image_file in args.images:
         phot_source["mag_err_neg"].info.format = "%.2f"
         phot_source["mag_err_pos"].info.format = "%.3f"
         reg_basename = os.path.basename(args.regions[0]).replace('.reg', '')
-        out_data_file = "aperture_phot_%s.csv" % (reg_basename)
+        out_data_file = "aperture_phot_%s_%s.csv" % (hst_filter, reg_basename)
         phot_source.write(out_data_file, overwrite=True)
         out_info_file = image_file.replace(".fits", "%s_apt_info.txt" % reg_basename)
         f = open(out_info_file, "w+")
