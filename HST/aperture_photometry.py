@@ -23,13 +23,7 @@ parser.add_argument("-a", "--aperture_correction", type=float, help='Aperture co
 args = parser.parse_args()
 regions = read_ds9(args.regions[0])
 source_reg = regions[0]
-source_aperture = hst_ut.region_to_aperture(source_reg)
-# if a background region was given
-if len(regions) > 1:
-    bkg_reg = regions[1]
-    bkg_aperture = hst_ut.region_to_aperture(bkg_reg)
-else:
-    logging.warning("No background was given, no background correction will be performed.")
+
 for image_file in args.images:
 
     if os.path.isfile(image_file):
@@ -56,6 +50,13 @@ for image_file in args.images:
         zero_point = float(hst_hdul[1].header["PHOTZPT"])
         image_data = hst_hdul[1].data
         hst_wcs = wcs.WCS(hst_hdul[1].header)
+        source_aperture = hst_ut.region_to_aperture(source_reg, hst_wcs)
+        # if a background region was given
+        if len(regions) > 1:
+            bkg_reg = regions[1]
+            bkg_aperture = hst_ut.region_to_aperture(bkg_reg, hst_wcs)
+        else:
+            logging.warning("No background was given, no background correction will be performed.")
         phot_source = aperture_photometry(image_data, source_aperture, wcs=hst_wcs)
         if len(regions) > 1:
             phot_bkg = aperture_photometry(image_data, bkg_aperture, wcs=hst_wcs)
