@@ -14,6 +14,7 @@ import numpy as np
 
 def region_flux(hdu_image, regions):
     image_wcs = wcs.WCS(hdu_image[1].header)
+    mask = hdu_image[1].data < 0 # mask negative values from the images
     apertures = [hst_ut.region_to_aperture(region, image_wcs) for region in regions]
     hst_filter = hst_ut.get_image_filter(hdu_image[0].header)
     detector = hdu_image[0].header["DETECTOR"] if "DETECTOR" in hdu_image[0].header else ""
@@ -24,7 +25,7 @@ def region_flux(hdu_image, regions):
         photflam = float(hdu_image[0].header["PHOTFLAM"])
     elif "PHOTFLAM" in hdu_image[1].header:
         photflam = float(hdu_image[1].header["PHOTFLAM"])
-    counts = np.array([aperture_photometry(hdu_image[1].data, region_aperture, wcs=image_wcs)["aperture_sum"] for region_aperture in apertures])
+    counts = np.array([aperture_photometry(hdu_image[1].data, region_aperture, wcs=image_wcs, mask=mask)["aperture_sum"] for region_aperture in apertures])
     fluxes = counts * photflam
     return np.median(fluxes), hst_filter
 
