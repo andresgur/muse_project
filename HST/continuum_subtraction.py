@@ -2,7 +2,7 @@
 # @Date:   26-04-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 11-12-2021
+# @Last modified time: 18-03-2022
 import argparse
 from photutils.aperture import aperture_photometry
 from regions import read_ds9
@@ -10,9 +10,11 @@ from astropy.io import fits
 from astropy import wcs
 import hst_utils as hst_ut
 import numpy as np
-def region_flux(hdu_image, apertures):
-    image_wcs = wcs.WCS(hdu_image[1].header)
 
+
+def region_flux(hdu_image, regions):
+    image_wcs = wcs.WCS(hdu_image[1].header)
+    apertures = [hst_ut.region_to_aperture(region, image_wcs) for region in regions]
     hst_filter = hst_ut.get_image_filter(hdu_image[0].header)
     detector = hdu_image[0].header["DETECTOR"] if "DETECTOR" in hdu_image[0].header else ""
     uv_filters = ["F200LP", "F300X", "F218W", "F225W", "F275W", "FQ232N", "FQ243N", "F280N"]
@@ -23,7 +25,7 @@ def region_flux(hdu_image, apertures):
     elif "PHOTFLAM" in hdu_image[1].header:
         photflam = float(hdu_image[1].header["PHOTFLAM"])
     counts = np.array([aperture_photometry(hdu_image[1].data, region_aperture, wcs=image_wcs)["aperture_sum"] for region_aperture in apertures])
-    fluxes = counts
+    fluxes = counts * photflam
     return np.median(fluxes), hst_filter
 
 
@@ -34,15 +36,14 @@ ap.add_argument("-c", "--continuum_band", nargs=1, help="Continuum band image", 
 ap.add_argument("-r", "--region", nargs=1, help="Regions where to extract the count rates to rescale the images to take into account the different bandwidth. More than one will take the average.", required=True)
 args = ap.parse_args()
 regions = read_ds9(args.region[0])
-apertures = [hst_ut.region_to_aperture(region) for region in regions]
 
 narrow_band_image = args.narrow_band[0]
 narrow_band_fits = fits.open(narrow_band_image)
-flux_narrow, filter_narrow = region_flux(narrow_band_fits, apertures)
+
+flux_narrow, filter_narrow = region_flux(narrow_band_fits, regions)
 continuum_band_image = args.continuum_band[0]
 continuum_band_fits = fits.open(continuum_band_image)
-flux_continuum, continuum_filter = region_flux(continuum_band_fits, apertures)
-
+flux_continuum, continuum_filter = region_flux(continuum_band_fits, regions)
 rescale_factor = flux_narrow / flux_continuum
 
 print("Applying a rescaling factor of %.2f" % rescale_factor)
