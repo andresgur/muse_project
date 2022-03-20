@@ -2,9 +2,12 @@
 # @Date:   11-12-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 17-03-2022
+# @Last modified time: 20-03-2022
 
 from photutils.aperture import CircularAperture, CircularAnnulus, EllipticalAperture, SkyCircularAperture, SkyCircularAnnulus, SkyEllipticalAperture
+import pyregion
+import astropy.units as u
+
 
 def get_image_filter(header):
     if "FILTER" in header:
@@ -14,6 +17,7 @@ def get_image_filter(header):
     else:
         return header["FILTER1"]
     return filter
+
 
 
 def region_to_aperture(region, wcs=None):
@@ -38,7 +42,7 @@ def region_to_aperture(region, wcs=None):
             return CircularAnnulus(source_center, r_in=region.inner_radius, r_out=region.outer_radius)
         elif region_type == "EllipsePixelRegion":
             # to be tested
-            return EllipticalAperture(source_center, a=region.width, b=region.height, theta=region.angle)
+            return EllipticalAperture(source_center, a=region.width / 2, b=region.height / 2, theta=region.angle.to(u.rad).value)
     elif "Sky" in region_type:
         if wcs is None:
             print("Error, cannot obtain aperture without a wcs.")
