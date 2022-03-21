@@ -2,7 +2,7 @@
 # @Date:   19-10-2020
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 17-03-2022
+# @Last modified time: 21-03-2022
 
 import os
 from regions import read_ds9
@@ -14,11 +14,15 @@ import astropy.units as u
 from astropy import wcs
 import logging
 import hst_utils as hst_ut
+import numpy as np
+from extinction import ccm89, remove
 
 
 parser = argparse.ArgumentParser(description='Extracts fluxes from the given apertures.')
 parser.add_argument("images", help="Image files where to extract fluxes", nargs='+', type=str)
 parser.add_argument("-r", "--regions", type=str, help='Source (first) and background (second line, optional) extraction region file to use for the aperture photometry', nargs=1)
+parser.add_argument("-e", "--exclude", type=str, help='Extraction region to exclude from the source aperture photometry', nargs="?")
+parser.add_argument("--av", type=float, help='Extinction correction to obtain derredened fluxes', nargs="?")
 parser.add_argument("-a", "--aperture_correction", type=float, help='Aperture correction (see https://stsci.edu/hst/instrumentation/wfc3/data-analysis/photometric-calibration/uvis-encircled-energy and https://stsci.edu/hst/instrumentation/acs/data-analysis/aperture-corrections)', nargs="?", default=1)
 args = parser.parse_args()
 regions = read_ds9(args.regions[0])
@@ -51,30 +55,34 @@ for image_file in args.images:
         image_data = hst_hdul[1].data
         hst_wcs = wcs.WCS(hst_hdul[1].header)
         source_aperture = hst_ut.region_to_aperture(source_reg, hst_wcs)
+        phot_source = aperture_photometry(image_data, source_aperture, error=np.sqrt(image_data * exp_time) / exp_time, wcs=hst_wcs)
+        source_area  = source_aperture.area
+        aperture_keyword = "corrected_aperture_sum(%s)" % units
+
+        if args.exclude is not None:
+
+            exclude_reg = read_ds9(args.exclude)[0]
+            exclude_aperture = hst_ut.region_to_aperture(exclude_reg, hst_wcs)
+            phot_exclude = aperture_photometry(image_data, exclude_aperture, wcs=hst_wcs, error=np.sqrt(image_data * exp_time) / exp_time)
+            source_area  -= exclude_aperture.area
+            phot_source["aperture_sum_err"] = np.sqrt(phot_exclude["aperture_sum_err"] ** 2 + phot_source["aperture_sum_err"] ** 2)
+            phot_source["aperture_sum"] -= phot_exclude["aperture_sum"]
+
         # if a background region was given
         if len(regions) > 1:
             bkg_reg = regions[1]
             bkg_aperture = hst_ut.region_to_aperture(bkg_reg, hst_wcs)
+            phot_bkg = aperture_photometry(image_data, bkg_aperture, wcs=hst_wcs, error=np.sqrt(image_data * exp_time) / exp_time)
+            phot_source[aperture_keyword] = (phot_source["aperture_sum"] - phot_bkg["aperture_sum"] / bkg_aperture.area * source_area) / args.aperture_correction
+            phot_source["corrected_aperture_err"] = sqrt(phot_source["aperture_sum_err"] ** 2 + (phot_bkg["aperture_sum_err"] / bkg_aperture.area * source_area) ** 2) / args.aperture_correction
+
         else:
             logging.warning("No background was given, no background correction will be performed.")
-        phot_source = aperture_photometry(image_data, source_aperture, wcs=hst_wcs)
-        if len(regions) > 1:
-            phot_bkg = aperture_photometry(image_data, bkg_aperture, wcs=hst_wcs)
+            phot_source[aperture_keyword] = phot_source["aperture_sum"] / args.aperture_correction
+            phot_source["corrected_aperture_err"] =phot_source["aperture_sum_err"] / args.aperture_correction
 
-        aperture_keyword = "corrected_aperture_sum(%s)" % units
-        # background correction
-        if len(regions) > 1:
-            phot_source[aperture_keyword] = phot_source["aperture_sum"] - phot_bkg["aperture_sum"] / bkg_aperture.area * source_aperture.area
-            phot_source["corrected_aperture_err"] = sqrt(phot_source["aperture_sum"] + (sqrt(phot_bkg["aperture_sum"]) / bkg_aperture.area * source_aperture.area) ** 2)
-        else:
-            phot_source[aperture_keyword] = phot_source["aperture_sum"]
-            phot_source["corrected_aperture_err"] = sqrt(phot_source["aperture_sum"])
-
-        phot_source_conf = phot_source[aperture_keyword] + phot_source["corrected_aperture_err"]
+        phot_source_conf_pos = phot_source[aperture_keyword] + phot_source["corrected_aperture_err"]
         phot_source_conf_neg = phot_source[aperture_keyword] - phot_source["corrected_aperture_err"]
-        counts_at_infinity = phot_source[aperture_keyword] / args.aperture_correction
-        counts_at_infinity_conf = phot_source_conf / args.aperture_correction
-        counts_at_infinity_neg = phot_source_conf_neg / args.aperture_correction
 
         # divide by the exposure time if needed
         if "/S" not in units:
@@ -84,18 +92,24 @@ for image_file in args.images:
             counts_at_infinity_neg /= exp_time
 
         flux_header = "flux(%s)" % photflam.unit
-        phot_source[flux_header] = counts_at_infinity * photflam
-        phot_source["flux_err"] = counts_at_infinity_conf * photflam - phot_source[flux_header]
+        phot_source[flux_header] = phot_source[aperture_keyword] * photflam
+        phot_source["flux_err"] = phot_source_conf_pos * photflam - phot_source[flux_header]
         #https://www.stsci.edu/hst/instrumentation/acs/data-analysis/zeropoints
-        phot_source["mag"] = -2.5 * log10(counts_at_infinity) - zero_point
-        phot_source["mag_err_neg"] = -2.5 * log10(counts_at_infinity_conf) - zero_point - phot_source["mag"]
-        phot_source["mag_err_pos"] = -2.5 * log10(counts_at_infinity_neg) - zero_point - phot_source["mag"]
+        phot_source["mag"] = -2.5 * log10(phot_source[aperture_keyword]) - zero_point
+        phot_source["mag_err_neg"] = -2.5 * log10(phot_source_conf_pos) - zero_point - phot_source["mag"]
+        phot_source["mag_err_pos"] = -2.5 * log10(phot_source_conf_neg) - zero_point - phot_source["mag"]
+
+        if args.av is not None:
+            waves = np.array([pivot_wavelength])
+            phot_source["der_flux"] = remove(ccm89(waves, args.av, 3.1, unit="aa"), phot_source[flux_header])
+            phot_source["der_flux_err"] = remove(ccm89(waves, args.av, 3.1, unit="aa"), phot_source_conf_pos* photflam ) - phot_source["der_flux"]
+
         # formatting
         phot_source["xcenter"].info.format = '%.2f'
         phot_source["ycenter"].info.format = '%.2f'
         phot_source["aperture_sum"].info.format = '%.3f'
         phot_source[aperture_keyword].info.format = '%.2f'
-        phot_source["corrected_aperture_err"].info.format = '%.1f'
+        phot_source["corrected_aperture_err"].info.format = '%.2f'
         phot_source[flux_header].info.format = '%.3E'
         phot_source['flux_err'].info.format = '%.2E'
         phot_source["mag"].info.format = "%.2f"
