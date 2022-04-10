@@ -161,7 +161,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     x_axis_map = fits.open(map_1)
     logx = np.log10(x_axis_map[0].data.data)
-    invalid_pixels = np.where((np.isnan(logx)) | (np.isnan(logy)))
+    invalid_pixels = np.where((np.isnan(logx)) | (np.isnan(logy)) | (np.isinf(logy)) | (np.isinf(logx)) )
 
     #logx = logx[invalid_pixels]
     #logy = logy[invalid_pixels]
@@ -174,7 +174,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
     offset = 0.04
-    valid_indexes = ~((np.isnan(logx)) | (np.isnan(logy)) | (np.isinf(logx)) | (np.isinf(logy)))
+    valid_indexes = ~((np.isnan(logx)) | (np.isnan(logy)) | (np.isinf(logx)) | (np.isinf(logy)) | (logy == 0) | (logx ==0))
     min_logx = np.nanmin(logx[valid_indexes])
     max_logx = np.nanmax(logx[valid_indexes])
     min_logy = np.nanmin(logy[valid_indexes])
@@ -366,8 +366,8 @@ bpt_lines=[[['OIII5007'],['HBETA']],
            [['OI6300'],['HALPHA']]]
 
 if args.config is not None:
-    if os.path.isfile('%s/.config/matplotlib/stylelib/presentation.mplstyle' % os.environ["HOME"]):
-        plt.style.use('/home/agurpide/.config/matplotlib/stylelib/presentation.mplstyle')
+    if os.path.isfile('%s/.config/matplotlib/stylelib/paper.mplstyle' % os.environ["HOME"]):
+        plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
     bptcfg = configparser.ConfigParser()
     bptcfg.read("%s" %args.config[0])
 
