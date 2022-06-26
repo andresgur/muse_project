@@ -9,7 +9,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from regions import read_ds9
+from regions import Regions
 from mpdaf.obj import Image
 from photutils.aperture import CircularAperture, CircularAnnulus, EllipticalAperture, SkyCircularAperture, SkyCircularAnnulus, SkyEllipticalAperture
 import pyregion
@@ -24,8 +24,8 @@ def region_to_aperture(region, wcs=None):
 
     Parameters
     ----------
-    region: regions.Region
-        Output of read_ds9 method
+    region: Regions.read or str
+        Output of Region.red method
     wcs: astropy.wcs.WCS
         A world coordinate system if the region in sky coordinates IS needed to convert it to pixels.
     """
@@ -277,10 +277,9 @@ def plot_regions(region_file, ax, fits_header=None):
         Fits header to convert image coordinates to fk5 (this will draw texts too and it's preferable than ds9)
     """
     if fits is None:
-        regs = read_ds9(region_file)
+        regs = Regions.read(region_file, format="ds9")
         for reg in regs:
             print(reg)
-            print("WARNING: I believe this method no longer exist. See https://astropy-regions.readthedocs.io/en/latest/api/regions.Region.html#regions.Region")
             reg.plot(ax=ax)
     else:
         # takes a string as input!
