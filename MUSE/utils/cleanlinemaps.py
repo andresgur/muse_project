@@ -45,8 +45,8 @@ def clean_images(images, snrmap, outdir="cleaned_images", smooth=False, sigma=1,
                 hdul[extension].data[np.where(hdul[extension].data == 0)] = np.nan
                 hdul[extension].data[np.where(snr_map[snr_extension].data < sthreshold)] = np.nan
             # write keywords
-            hdul[extension].set("SNR", "%.2f" % sthreshold, 'SNR threshold to filter the map')
-            hdul[extension].set("SNR_file", "%.2f" % snrmap.filename, 'SNR file used to filter the map')
+            hdul[extension].header.set("SNR", "%.2f" % sthreshold, 'SNR threshold to filter the map')
+            hdul[extension].header.set("SNR_file", "%s" % snrmap.filename, 'SNR file used to filter the map')
 
             if "WCSAXES" in hdul[0].header:
                 if hdul[0].header["WCSAXES"] == 3:
