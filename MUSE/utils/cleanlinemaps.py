@@ -2,7 +2,7 @@
 # @Date:   28-06-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 09-04-2022
+# @Last modified time: 10-02-2022
 
 
 
@@ -15,6 +15,7 @@
 # imports
 import argparse
 import os
+import sys
 from astropy.io import fits
 import numpy as np
 import glob
@@ -39,12 +40,13 @@ def clean_images(images, snrmap, outdir="cleaned_images", smooth=False, sigma=1,
 
             if "vel" in image or 'z' in image:
                 hdul[extension].data[np.where(np.isnan(snr_map[extension].data))] = np.nan
-                hdul[extension].header['COMMENT'] = "Used map %s to filter this image" % snrmap.filename()
+
             else:
                 hdul[extension].data[np.where(hdul[extension].data == 0)] = np.nan
                 hdul[extension].data[np.where(snr_map[snr_extension].data < sthreshold)] = np.nan
-                hdul[extension].header['COMMENT'] = "Used map %s to filter this image" % snrmap.filename()
-                hdul[extension].header['COMMENT'] = "Used a signal to noise ratio of %.2f to filter this image" % sthreshold
+            # write keywords
+            hdul[extension].set("SNR", "%.2f" % sthreshold, 'SNR threshold to filter the map')
+            hdul[extension].set("SNR_file", "%.2f" % snrmap.filename, 'SNR file used to filter the map')
 
             if "WCSAXES" in hdul[0].header:
                 if hdul[0].header["WCSAXES"] == 3:
@@ -74,7 +76,7 @@ rootname = args.rootname
 line = args.line
 sthreshold = args.threshold
 outdir = args.outdir
-snr_input_map = args.signaltonoiseratiomap
+file_map = args.signaltonoiseratiomap
 
 if args.smooth:
     outdir += "_smoothed%d" % 2
@@ -82,26 +84,26 @@ if args.smooth:
 if not os.path.isdir(outdir):
     os.mkdir(outdir)
 
-snr_map = None
-# By default try to locate the root snr file name
-if rootname != "":
+if file_map != "" and os.path.isfile(file_map):
+    snr_map = fits.open(file_map)
+
+elif rootname != "":
     file_map = glob.glob('./%s*snr*%s.fits' % (rootname, line))
     if len(file_map) == 0:
-        raise ValueError("SNR map with rootname %s for line %s not found!" % (rootname, line))
+        print("SNR map with rootname %s for line %s not found!" % (rootname, line))
+        sys.exit()
     elif os.path.isfile(file_map[0]):
         print("Found %s SNR map" % file_map[0])
         snr_map = fits.open(file_map[0])
 
-# If provided use the input one
-if snr_input_map != "":
-    if os.path.isfile(snr_input_map):
-        print("Found new input %s SNR map. The map will be cleaned using this SNR map then." % snr_input_map)
-        snr_map = fits.open(snr_input_map)
     else:
-        raise ValueError("Unable to locate signal noise ratio map %s. Provide a rootname or a file!" % snr_input_map)
+        print("Signal to noise ratio map %s does not exist!" % file_map)
+        sys.exit()
+else:
+    print("Unable to load signal noise ratio map %s. Provide a rootname or a file!" % file_map)
+    sys.exit()
 
-elif snr_map is None:
-    raise ValueError('Unable to locate any SNR map. Provide a rootname or an input SNR map!')
+print('Loaded signal to noise ratio map %s successfully' % file_map)
 
 if rootname != "":
     images_toclean = glob.glob('./%s*[!snr]*%s.fits' % (rootname, line))
