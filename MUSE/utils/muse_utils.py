@@ -1,17 +1,18 @@
 # @Author: Andrés Gúrpide <agurpide>
-# @Date:   04-04-2019
-# @Email:  agurpidelash@irap.omp.eu
+# @Date:   29-08-2019
+# @Email:  a.gurpide-lasheras@soton.ac.uk
 # @Last modified by:   agurpide
-# @Last modified time: 09-03-2022
-
+# @Last modified time: 13-03-2023
+# !/usr/bin/env python3
 
 # imports
+from photutils.aperture import aperture_photometry, CircularAperture, CircularAnnulus, EllipticalAperture, SkyCircularAperture, SkyCircularAnnulus, SkyEllipticalAperture
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 from regions import Regions
-from mpdaf.obj import Image
-from photutils.aperture import CircularAperture, CircularAnnulus, EllipticalAperture, SkyCircularAperture, SkyCircularAnnulus, SkyEllipticalAperture
+from mpdaf.obj import Image, Cube
+from mpdaf import obj
 import pyregion
 import astropy.units as u
 from collections import OrderedDict
@@ -21,15 +22,17 @@ from astropy.io import fits
 
 def region_to_aperture(region, wcs=None):
     """Convert region object to photutils.aperture.aperture_photometry object. The wcs object is needed only if the input regions are in sky coordinates.
-
     Parameters
     ----------
-    region: Regions.read or str
-        Output of Region.red method
+    region: str or output of Regions.read
+        Output of output of Regions.read method or str
     wcs: astropy.wcs.WCS
         A world coordinate system if the region in sky coordinates IS needed to convert it to pixels.
     """
 
+    if type(region)==str:
+        region = Regions.read(region, format="ds9")[0]
+    print(region)
     region_type = type(region).__name__
     if "Pixel" in region_type:
         source_center = (region.center.x, region.center.y)
@@ -48,12 +51,13 @@ def region_to_aperture(region, wcs=None):
         if region_type == "CircleSkyRegion":
             return SkyCircularAperture(center, r=region.radius).to_pixel(wcs)
         elif region_type == "EllipseSkyRegion":
-            return SkyEllipticalAperture(center, a=region.width, b=region.height, theta=region.angle).to_pixel(wcs)
+            return SkyEllipticalAperture(center, a=region.width / 2, b=region.height / 2, theta=region.angle).to_pixel(wcs)
         elif region_type == "CircleAnnulusSkyRegion":
             return SkyCircularAnnulus(center, r_in=region.inner_radius, r_out=region.outer_radius).to_pixel(wcs)
     else:
         print("Error region not implemented")
         return None
+
 
 
 def read_psf_fits(fits_file, extension=1):
@@ -81,24 +85,38 @@ def get_sky_res(input_mpdaf):
         return None, None
 
 
+def get_fwhm_inst_bacon(wavelength, measurement="udf-10"):
+    """Get MUSE FWHM LSF based on Bacon et al. 2017 Equation 8 (see also Benoit et al. 2018) 1"""
+    if measurement == "udf-10":
+        return 5.866 * 10**(-8) * wavelength ** 2 - 9.187 * 10**(-4) * wavelength + 6.04
+    elif measurement == "mosaic":
+        return 5.835 * 10**(-8) * wavelength ** 2 - 9.080 * 10**(-4) * wavelength + 5.983
+    else:
+        print("Error: Measurement %s option not found, returning default udf-10 measurement")
+        return 5.866 * 10**(-8) * wavelength ** 2 - 9.187 * 10**(-4) * wavelength + 6.04
+
+
 def region_to_mask(image, region):
     """Creates a mask out of a region file. Masks everything outside the region.
     Parameters:
-    fits : astropy.io.fits.ImageHDU or mpdaf.obj.Image
-        The fits HDU corresponding to an image or in mpdaf.obj.Image
+    fits : astropy.io.fits
+        The fits file you want to create the mask for (Cube or Image)
     region : str
         The region file with which you want to create the mask (path)
     returns a ndarray with 0 for masked values and 1 for non-masked values
     """
-    mask_region = pyregion.open(region)
-    print("Mask region: ")
-    print(mask_region)
-    try:
-        mask = mask_region.get_mask(hdu=image)
-    except AttributeError:
-        mask = mask_region.get_mask(hdu=image.get_data_hdu())
-    mask = ~mask
-    return mask
+    # mpdaf object
+    if isinstance(image, Image) or isinstance(image, Cube):
+        wcs = image.wcs.wcs
+        shape = image.data.shape
+    # fits file
+    else:
+        wcs = wcs.WCS(image.header)
+        shape = image.data.shape
+
+    aperture = region_to_aperture(region, wcs)
+    mask = aperture.to_mask()
+    return mask.to_image(shape)
 
 
 def load_map_file(file):
@@ -185,7 +203,7 @@ def create_grid(outname, *image_files, region=None, cutting_region=None, vmin=No
                    zscale=False, vmin=vmin)
 
         if region is not None:
-            plot_regions(region, ax)
+            plot_regions(region, ax, image.primary_header)
 
         if colorbar is not None:
             im = ax.images
@@ -232,7 +250,7 @@ def plot_image(outname, image_file, region=None, cutting_region=None, vmin=None,
     ax.set_ylabel('Dec')
 
     if region is not None:
-        plot_regions(region, ax)
+        plot_regions(region, ax, image.primary_header)
 
     if colorbar is not None:
         im = ax.images
@@ -280,6 +298,7 @@ def plot_regions(region_file, ax, fits_header=None):
         regs = Regions.read(region_file, format="ds9")
         for reg in regs:
             print(reg)
+            print("WARNING: I believe this method no longer exist. See https://astropy-regions.readthedocs.io/en/latest/api/regions.Region.html#regions.Region")
             reg.plot(ax=ax)
     else:
         # takes a string as input!
@@ -287,7 +306,6 @@ def plot_regions(region_file, ax, fits_header=None):
         regs = pyregion.parse(reg_string).as_imagecoord(fits_header)
         print(regs)
         patch_list, artist_list = regs.get_mpl_patches_texts()
-
         for p in patch_list:
             ax.add_patch(p)
 
@@ -295,33 +313,7 @@ def plot_regions(region_file, ax, fits_header=None):
             ax.add_artist(t)
 
 
-def format_axis(ax, labelsize=17):
-    ax.minorticks_on()
-    # major ticks
-    ax.tick_params(length=10, width=2, direction='in', labelsize=labelsize)
-    # minor ticks
-    ax.tick_params(which='minor', length=5)
-
-
-def create_linestyle_array(data_length):
-    """Create an array of colors given the length of a dataset. Useful for plots where a unique color is needed for each dataset.
-
-    The returned colors come from the jet map.
-
-    Parameters
-    ----------
-    data_length : The length of your data for the color array creation.
-
-    """
-    print("Creating linestyle array for %i datasets" % data_length)
-    m = np.array(['solid', 'dotted', 'dashed', 'dashdot'])
-
-    while data_length > len(m):
-        m = np.concatenate((m, m))
-    return m
-
-
-def create_color_array(data_length, cmap='jet'):
+def create_color_array(data_length, cmap='tab20'):
     """Create an array of colors given the length of a dataset. Useful for plots where a unique color is needed for each dataset.
 
     The returned colors come from the jet map.
