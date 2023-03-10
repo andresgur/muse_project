@@ -2,7 +2,7 @@
 # @Date:   20-05-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 22-12-2021
+# @Last modified time: 10-02-2022
 # Script to compute extinction map
 from astropy.io import fits
 import argparse
@@ -36,15 +36,15 @@ ap = argparse.ArgumentParser(description='Calculate an extinction map using the 
 ap.add_argument("-r", "--rootname", nargs='?', help="Root name of the input line files", type=str, default="cleancamel")
 ap.add_argument("-R", "--ratio", help="Ratio of total to selective extinction Av/E(B-V). Default Rv=4.05 from Calzetti", type=float, default=4.05, nargs="?")
 ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio. Default 2.86", type=float, default=2.86, nargs="?")
-ap.add_argument("-b", "--hbeta", help="Path to HBETA flux maps", type=str, required=True, nargs=1)
-ap.add_argument("-a", "--halpha", help="Path to HALPHA flux maps", type=str, required=True, nargs=1)
+ap.add_argument("-b", "--hbeta", help="Path to HBETA flux map directory", type=str, required=True, nargs=1)
+ap.add_argument("-a", "--halpha", help="Path to HALPHA flux map directory", type=str, required=True, nargs=1)
 args = ap.parse_args()
 halpha = 6563.0 * u.angstrom
 hbeta = 4861.0 * u.angstrom
 
 outdir = "deredden_momcheva"
 lines = ['OII3727', 'OII3729', 'HBETA', 'OI6300', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA']
-
+keyword = "flux" # could be "flux"
 
 if not os.path.isdir(outdir):
     os.mkdir(outdir)
@@ -52,11 +52,10 @@ if not os.path.isdir(outdir):
 Rv = args.ratio
 curve = "calzetti"
 extincton_curve = C00(Rv)
+print('%s/%s_*[!e]%s_*%s.fits' % (args.halpha[0], args.rootname, keyword, "HALPHA"))
+halpha_file = glob.glob('%s/%s_*[!e]%s_*%s.fits' % (args.halpha[0], args.rootname,  keyword, "HALPHA"))[0]
+hbeta_file = glob.glob('%s/%s_*[!e]%s_*%s.fits' % (args.hbeta[0], args.rootname, keyword, "HBETA"))[0]
 
-halpha_file = glob.glob('%s/*_*[!e]flux_*%s.fits' % (args.halpha[0], "HALPHA"))[0]
-hbeta_file = glob.glob('%s/*_*[!e]flux_*%s.fits' % (args.hbeta[0], "HBETA"))[0]
-print("HALPHA file found: %s" % halpha_file)
-print("HBETA file found: %s" % hbeta_file)
 halpha_map = fits.open(halpha_file, extname="IMAGE")
 if halpha_map[0].header["WCSAXES"] == 3:
     halpha_map[0].header["WCSAXES"] = 2
@@ -69,7 +68,7 @@ observed_ratios = halpha_map[0].data / hbeta_map[ext].data
 # get E(beta-halpha)
 color_excess = 2.5 * np.log10(observed_ratios / args.intrinsic)
 color_excess_map = fits.PrimaryHDU(data=color_excess, header=halpha_map[0].header)
-color_excess_map.writeto("%s/decrement_color_excess.fits" % outdir, overwrite=True)
+color_excess_map.writeto("%s/decrement_color_excess_%.2f.fits" % (outdir, args.intrinsic), overwrite=True)
 
 # E(alpha - beta) / A(V)
 kbeta = extincton_curve.evaluate(hbeta)
@@ -82,23 +81,31 @@ print(kalpha)
 print("k(beta) - k(halpha)")
 print(curve_color_excess)
 Ebv = color_excess / curve_color_excess
-Ebv[np.where(Ebv < 0)] = 0
+Ebv[np.where(Ebv < 0)] = np.nan
 color_excess_map = fits.PrimaryHDU(data=Ebv, header=halpha_map[0].header)
-color_excess_map.writeto("%s/color_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
-print("Color excess map saved to %s/total_color_excess.fits" % outdir)
+out_color_excess = "color_excess_%s_Rv%.1f_i%.2f.fits" % (curve, Rv, args.intrinsic)
+color_excess_map.writeto("%s/%s" % (outdir, out_color_excess), overwrite=True)
+print("Color excess map saved to %s/%s" % (outdir, out_color_excess))
 print("Mean color excess: %.2f" % np.nanmean(Ebv))
-# compute uncertainties
-halpha_efile = glob.glob('%s/*_*eflux_*%s.fits' % (args.halpha[0], "HALPHA"))[0]
-hbeta_efile = glob.glob('%s/*_*eflux_*%s.fits' % (args.hbeta[0], "HBETA"))[0]
-print("HALPHA error file found: %s" % halpha_efile)
-print("HBETA error file found: %s" % hbeta_efile)
-halpha_emap = fits.open(halpha_efile, extname="IMAGE")
-hbeta_emap = fits.open(hbeta_efile, extname="IMAGE")
-# derivative of log10(x) --> x'/x log10e (derivative of dHa/Hb/dHa = 1/Hb; d(Ha/Hb)/dHb = Ha/Hb^2
-err_ebv = 2.5 * np.sqrt((np.log10(np.e) * (1 / halpha_map[0].data) * halpha_emap[0].data) ** 2 + (np.log10(np.e) * (1 / hbeta_map[ext].data) * hbeta_emap[0].data)**2) / curve_color_excess
-ecolor_excess_map = fits.PrimaryHDU(data=err_ebv, header=halpha_map[0].header)
 
-ecolor_excess_map.writeto("%s/ecolor_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
+# compute uncertainties
+halpha_efile = glob.glob('%s/*_*e%s_*%s.fits' % (args.halpha[0], keyword, "HALPHA"))[0]
+hbeta_efile = glob.glob('%s/*_*e%s_*%s.fits' % (args.hbeta[0], keyword, "HBETA"))[0]
+if len(halpha_efile) > 0:
+    uncertainties = 1
+    print("HALPHA error file found: %s" % halpha_efile)
+    print("HBETA error file found: %s" % hbeta_efile)
+    halpha_emap = fits.open(halpha_efile, extname="IMAGE")
+    hbeta_emap = fits.open(hbeta_efile, extname="IMAGE")
+    # derivative of log10(x) --> x'/x log10e (derivative of dHa/Hb/dHa = 1/Hb; d(Ha/Hb)/dHb = Ha/Hb^2
+    err_ebv = 2.5 * np.sqrt((np.log10(np.e) * (1 / halpha_map[0].data) * halpha_emap[0].data) ** 2 + (np.log10(np.e) * (1 / hbeta_map[ext].data) * hbeta_emap[0].data)**2) / curve_color_excess # I believe there's a mistake here as it should be dlog10(x) = 1 / xln(10) instead of log10(e)/x which is ln(e)/xln(10_
+    # I thought the above was incorrect, but comparing two different calculations I get exactly same results
+    ecolor_excess_map = fits.PrimaryHDU(data=err_ebv, header=halpha_map[0].header)
+    ecolor_excess_map.writeto("%s/ecolor_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
+else:
+    uncertainties = 0
+    print("Warning; halpha error file not found. Uncertainties won't be computed")
+
 for line in lines:
     print("\tDereddening %s line" % line)
     wavemap = glob.glob('./camel_*/cleaned_images/%s_*[!e]wave_*%s.fits' % (args.rootname, line))
@@ -107,8 +114,8 @@ for line in lines:
         continue
     wavemap = wavemap[0]
 
-    fluxmap = glob.glob('./camel_*/cleaned_images/%s_*[!e]flux_*%s.fits' % (args.rootname, line))[0]
-    efluxmap = glob.glob('./camel_*/cleaned_images/%s_*eflux_*%s.fits' % (args.rootname, line))[0]
+    fluxmap = glob.glob('./camel_*/cleaned_images/%s_*[!e]%s_*%s.fits' % (args.rootname, keyword, line))[0]
+    efluxmap = glob.glob('./camel_*/cleaned_images/%s_*e%s_*%s.fits' % (args.rootname, keyword, line))[0]
     print("Using wavelength map: %s" % wavemap)
     print("Using flux map: %s" % fluxmap)
     print("Using eflux map: %s" % efluxmap)
@@ -131,7 +138,8 @@ for line in lines:
             else:
                 extinction_curve_value = extincton_curve.evaluate(wavelenghts[x, y] * u.angstrom)
                 fluxes[x, y] = fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])
-                efluxes[x, y] = np.sqrt((efluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])) ** 2 + (err_ebv[x, y] * fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y]) * np.log(10**(0.4 * extinction_curve_value)))**2)
+                if uncertainties:
+                    efluxes[x, y] = np.sqrt((efluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])) ** 2 + (err_ebv[x, y] * fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y]) * np.log(10**(0.4 * extinction_curve_value)))**2)
     dereddened_fits = fits.PrimaryHDU(data=fluxes, header=fluxes_fits.header)
     dereddened_fits.header['CURVE'] = "%s" % curve
     dereddened_fits.header['R_v'] = "%.1f" % args.ratio
@@ -144,8 +152,9 @@ for line in lines:
     edereddened_fits.header['R_v'] = "%.1f" % args.ratio
     edereddened_fits.header['Ratio'] = "%.1f" % args.intrinsic
     edereddened_fits.header['COMMENT'] = "Balmer ratio: %s/%s" % (halpha_file, hbeta_file)
-    eoutfile = efluxmap.replace(".fits", "deredden.fits")
-    edereddened_fits.writeto(eoutfile, overwrite=True)
+    if uncertainties:
+        eoutfile = efluxmap.replace(".fits", "deredden.fits")
+        edereddened_fits.writeto(eoutfile, overwrite=True)
     python_argument = "%s -R %.1f -i %.1f -a %s -b %s" % (__file__, Rv, args.intrinsic, args.halpha[0], args.hbeta[0])
     with open("%s/python_command.txt" % outdir, "w+") as f:
         f.write(python_argument)
