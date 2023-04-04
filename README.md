@@ -29,6 +29,7 @@ image_stats.py image.fits -region ds9reigonfile.reg
 extract_radial_profiles.py images -s number_of_sectors -r max_r (pixels) --starting_angle (any offset angle)
 
 ![Radial profile](https://github.com/andresgur/muse_project/blob/main/images/OIII5007_HBETAratio_profile.png?raw=true)
+![Sectors profile](https://github.com/andresgur/muse_project/blob/main/images/OIII5007_HBETAratio_sectors.png?raw=true)
 
 ----MAPPINGS-----
 
