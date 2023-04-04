@@ -2,23 +2,17 @@
 
 These scripts were developed for [Gúrpide et al. 2022](https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract) and have been regularly updated since then. They allow to extract useful information mainly from MUSE datacubes and images but there's also some functionality to extract fluxes from hst images and chandra PSF profiles
 
-~~~~~~~~~~~~~~~~~~
-~    Chandra     ~
-~~~~~~~~~~~~~~~~~~
+## CHANDRA
 marxsim_script.py --> Script to be run from the command line to simulate N PSFs based on a given chandra observation. Ciao and marx need to be properly setup before running the script. Use python marxsim_script.py -h to obtain the available command line arguments
 
 check_extension.py --> Script to be run after marxsim_script.py has been run to analyse the output. Use python marxsim_script.py -h to obtain the available command line arguments
 
-~~~~~~~~~~~~~~~~~
-~      HST      ~ 
-~~~~~~~~~~~~~~~~~
+## HST
 aperture_photometry.py --> Script to retrieve magnitudes, fluxes from a given ds9 region (it automatically reads the necessary keywords from the header to perform the corrections). A finite aperture correction is needed for small PSFs. Background subtraction is also possible (must be added a second line in the ds9 region file).
 
 astro_corr.py --> Script to refine the astrometry of several HST images (more than one is possible, and the solution will be global to all of them) using the gaia catalogue. It uses tweakreg https://drizzlepac.readthedocs.io/en/latest/tweakreg.html.
 
-~~~~~~~~~~~~~~~~~
-~      MUSE     ~
-~~~~~~~~~~~~~~~~~
+##MUSE
 ----reddening----
 
 deredden.py --> Script to deredden flux line maps, it needs as input the balmer decrement map (Halpha/Hbeta) and it will automatically localize the flux maps
@@ -31,6 +25,8 @@ cutfromregion.py --> Script to cut images from an input region ds9 file.
 
 image_stats.py --> Retrieve statistical information (min, max, mean) of a region or entire image by default
 image_stats.py image.fits -region ds9reigonfile.reg
+
+extract_radial_profiles.py images -s number_of_sectors -r max_r (pixels) --starting_angle (any offset angle)
 
 ----MAPPINGS-----
 
