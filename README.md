@@ -1,9 +1,6 @@
 # muse_project
 
-These scripts were developed for https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract 
-
-
-Various scripts for multi-wavelength analysis of ULX and their environments
+These scripts were developed for [Gúrpide et al. 2022](https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract) and have been regularly updated since then. They allow to extract useful information mainly from MUSE datacubes and images but there's also some functionality to extract fluxes from hst images and chandra PSF profiles
 
 ~~~~~~~~~~~~~~~~~~
 ~    Chandra     ~
@@ -49,7 +46,7 @@ bpt_newer.py -> bpt diagram from Law et al. 2021, now with geometry
 # Acknowledging
 
 If these scripts were useful to you, we would greatly appreciate if you could cite the original paper for which these scripts were developed.
-
+```
 @ARTICLE{2022A&A...666A.100G,
        author = {{G{\'u}rpide}, A. and {Parra}, M. and {Godet}, O. and {Contini}, T. and {Olive}, J. -F.},
         title = "{MUSE spectroscopy of the ULX NGC 1313 X-1: A shock-ionised bubble, an X-ray photoionised nebula, and two supernova remnants}",
@@ -67,5 +64,5 @@ archivePrefix = {arXiv},
        adsurl = {https://ui.adsabs.harvard.edu/abs/2022A&A...666A.100G},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
-
+```
 
