@@ -46,8 +46,9 @@ bpt_newer.py -> bpt diagram from Law et al. 2021, now with geometry
 # Acknowledging
 
 If these scripts were useful to you, we would greatly appreciate if you could cite the original paper for which these scripts were developed.
+       
 ```
-@ARTICLE{2022A&A...666A.100G,
+@article{2022A&A...666A.100G,
        author = {{G{\'u}rpide}, A. and {Parra}, M. and {Godet}, O. and {Contini}, T. and {Olive}, J. -F.},
         title = "{MUSE spectroscopy of the ULX NGC 1313 X-1: A shock-ionised bubble, an X-ray photoionised nebula, and two supernova remnants}",
       journal = {\aap},
