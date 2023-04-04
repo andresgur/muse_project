@@ -28,6 +28,8 @@ image_stats.py image.fits -region ds9reigonfile.reg
 
 extract_radial_profiles.py images -s number_of_sectors -r max_r (pixels) --starting_angle (any offset angle)
 
+(https://github.com/andresgur/muse_project/blob/main/images/OIII5007_HBETAratio_profile.png)
+
 ----MAPPINGS-----
 
 read_mappings.py --> Script to obtain predicted line ratios from the mapping libraries (python read_mappings.py <files> (for instance V_*_b0_001_s_lines.txt V_*b1_s_lines.txt [MVQP]_*b[0e]_s_lines.txt [MVQ]_*b10_s_lines.txt T_*b0_001_s_lines.txt T_*b1_s_* T_*b10_s_lines.txt). The script will read the paths to the BPT diagrams from bpt_config.py file
