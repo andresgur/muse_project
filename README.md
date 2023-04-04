@@ -12,7 +12,7 @@ aperture_photometry.py --> Script to retrieve magnitudes, fluxes from a given ds
 
 astro_corr.py --> Script to refine the astrometry of several HST images (more than one is possible, and the solution will be global to all of them) using the gaia catalogue. It uses tweakreg https://drizzlepac.readthedocs.io/en/latest/tweakreg.html.
 
-##MUSE
+## MUSE
 ----reddening----
 
 deredden.py --> Script to deredden flux line maps, it needs as input the balmer decrement map (Halpha/Hbeta) and it will automatically localize the flux maps
