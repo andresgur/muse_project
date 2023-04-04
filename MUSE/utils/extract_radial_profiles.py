@@ -5,6 +5,9 @@ from mpdaf.obj import Image, Cube
 from regions import Regions
 import os
 import astropy.units as u
+from regions import CirclePixelRegion
+from regions import PixCoord
+
 
 def wrap_to_pi(angle):
     # Wrap the angle from 0 to 2*pi
@@ -32,21 +35,26 @@ def create_plot(image):
 
         image.mask[sector_condition] = False
 
-    plt.subplots(subplot_kw={"projection": image.wcs.wcs})
+    fig, ax = plt.subplots(subplot_kw={"projection": image.wcs.wcs})
+    x, y  = 0.5 * np.array([image.wcs.naxis1 - 1, image.wcs.naxis2 - 1])
+    # plot circles
+    [CirclePixelRegion(PixCoord(x=x, y=y), radius=radius).plot(ax=ax, facecolor='none', edgecolor='red', lw=0.5) for radius in radii[1:]]
     plt.imshow(image.data)
     plt.xlabel("Ra")
     plt.ylabel("Dec")
     basename = os.path.basename(image.filename)
-    plt.savefig(basename.replace(".fits", "_sectors.png"))
+    outname = basename.replace(".fits", "_sectors_%d_max_%d.png" % (sectors, max_r))
+    plt.savefig(outname)
     plt.close()
+    print("Stored sector plot to %s" % outname)
 
 
 ap = argparse.ArgumentParser(description='Extracts radial profiles from the input Images. All images are assumed to be the same size')
-ap.add_argument("input_images", nargs=1, help="List of images to extract the profiles from")
+ap.add_argument("input_images", nargs="+", help="List of images to extract the profiles from")
 ap.add_argument("--region", nargs=1, help='Region file to cut the image')
-ap.add_argument("-r", "--radius", nargs="?", help='Maximum radius for the radial profiles. Default None', default=None, type=float)
-ap.add_argument("-s", "--sectors", nargs="?", help='Number of radial directions. Defaults to the whole image', default=4, type=int)
-ap.add_argument("--start_angle", nargs="?", help='Start angle for the rotation in deg. Default 0', default=0, type=float)
+ap.add_argument("-r", "--radius", nargs="?", help='Maximum radius for the radial profiles. Default None', default=None, type=int)
+ap.add_argument("-s", "--sectors", nargs="?", help='Number of radial directions or "sectors". Defaults to 4', default=4, type=int)
+ap.add_argument("--start_angle", nargs="?", help='Start angle offset in deg. Default 0', default=0, type=float)
 args = ap.parse_args()
 
 sectors = args.sectors
@@ -72,7 +80,7 @@ start = [img.wcs.naxis2 - 1, img.wcs.naxis1 - 1]
 center = 0.5 * np.array([img.wcs.naxis2 - 1, img.wcs.naxis1 - 1])
 max_img_r = np.hypot(np.abs(start[0] - center[0]), np.abs(start[1] - center[1]))
 max_r = args.radius if args.radius is not None else max_img_r
-radii = np.arange(0, max_r, 5) # every two pixels
+radii = np.arange(0, max_r, 5)
 
 if args.region is not None:
     reg = Regions.read(args.region, format="ds9")
@@ -107,13 +115,13 @@ for image_file in args.input_images:
         np.savetxt(basename.replace(".fits", "%d.dat" % index), outputs.T, header="r\tmean", fmt="%.4f")
 
 import glob
-files = glob.glob(basename.replace(".fits", "*.dat"))
+files = glob.glob(basename.replace(".fits", "[0-%d].dat" % (sectors - 1 )))
 
 for file in files:
     data = np.genfromtxt(file, names=True)
-
     plt.plot(data["r"] * img.get_step(unit=u.arcsec)[0], data["mean"], label=file)
+
 plt.legend()
 plt.xlabel("Radial distance (arcsec)")
 plt.ylabel("Flux")
-plt.savefig(basename.replace(".fits", "_profile.png"))
+plt.savefig(basename.replace(".fits", "_profile_%d.png" % sectors))
