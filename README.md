@@ -1,5 +1,8 @@
 # muse_project
 
+These scripts were developed for https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract 
+
+
 Various scripts for multi-wavelength analysis of ULX and their environments
 
 ~~~~~~~~~~~~~~~~~~
@@ -41,3 +44,28 @@ read_mappingsV.py --> Script to obtain predicted line ratios from the mapping V 
 -------BPT-------
 
 bpt_newer.py -> bpt diagram from Law et al. 2021, now with geometry
+
+
+# Acknowledging
+
+If these scripts were useful to you, we would greatly appreciate if you could cite the original paper for which these scripts were developed.
+
+@ARTICLE{2022A&A...666A.100G,
+       author = {{G{\'u}rpide}, A. and {Parra}, M. and {Godet}, O. and {Contini}, T. and {Olive}, J. -F.},
+        title = "{MUSE spectroscopy of the ULX NGC 1313 X-1: A shock-ionised bubble, an X-ray photoionised nebula, and two supernova remnants}",
+      journal = {\aap},
+     keywords = {instrumentation: spectrographs, stars: black holes, ISM: jets and outflows, stars: neutron, X-rays: binaries, accretion, accretion disks, Astrophysics - High Energy Astrophysical Phenomena},
+         year = 2022,
+        month = oct,
+       volume = {666},
+          eid = {A100},
+        pages = {A100},
+          doi = {10.1051/0004-6361/202142229},
+archivePrefix = {arXiv},
+       eprint = {2201.09333},
+ primaryClass = {astro-ph.HE},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2022A&A...666A.100G},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
+
+
