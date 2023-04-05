@@ -27,7 +27,9 @@ python cutfromregion.py <image or cube .fits? -r <ds9 region for the cut> -o <ou
 
 Before             |  After
 :-------------------------:|:-------------------------:
-![Sectors profile](images/OIII5007_HBETAratio_n_4_max_70.png)  |  ![Radial profile](images/OIII5007_HBETAratio_profile_4.png)
+![Sectors profile](images/image_reg.png)  |  ![Radial profile](images/image_reg_cut.png)
+
+
 
 image_stats.py --> Retrieve statistical information (min, max, mean) of a region or entire image by default
 image_stats.py image.fits -region ds9reigonfile.reg
