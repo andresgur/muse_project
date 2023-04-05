@@ -23,15 +23,21 @@ deredden_momcheva.py --> Script to deredden flux line maps based on appendix of 
 
 cutfromregion.py --> Script to cut images from an input region ds9 file.
 
+python cutfromregion.py <image or cube .fits? -r <ds9 region for the cut> -o <outname> (otherwise autonamed as cut+image)
+
+Before             |  After
+:-------------------------:|:-------------------------:
+![Sectors profile](images/OIII5007_HBETAratio_n_4_max_70.png)  |  ![Radial profile](images/OIII5007_HBETAratio_profile_4.png)
+
 image_stats.py --> Retrieve statistical information (min, max, mean) of a region or entire image by default
 image_stats.py image.fits -region ds9reigonfile.reg
 
 extract_radial_profiles.py images -n number_rectangles -r max_r (pixels) --offset <angle in deg> -w <width of the rectangles in pixels>
 
 e.g. python extract_radial_profiles.py images -n 4 -r 70 --offset 10
-Sectors             |  Radial averaged profiles
+Extraction regions             |  Radial averaged profiles
 :-------------------------:|:-------------------------:
-![Sectors profile](images/OIII5007_HBETAratio_n_4_max_70.png)  |  ![Radial profile](images/OIII5007_HBETAratio_profile_4.png)
+![Extraction regions](images/OIII5007_HBETAratio_n_4_max_70.png)  |  ![Radial profile](images/OIII5007_HBETAratio_profile_4.png)
 
 
 ----MAPPINGS-----
