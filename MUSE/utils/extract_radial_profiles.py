@@ -5,45 +5,27 @@ from mpdaf.obj import Image, Cube
 from regions import Regions
 import os
 import astropy.units as u
-from regions import CirclePixelRegion
+from regions import RectanglePixelRegion
 from regions import PixCoord
 
 
-def wrap_to_pi(angle):
-    # Wrap the angle from 0 to 2*pi
-    angle = np.mod(angle, 2*np.pi)
-    # Convert the angle to the range from -pi to pi
-    angle[angle > np.pi] = angle[angle > np.pi] - 2 * np.pi
-    angle[angle < -np.pi] = angle[angle < -np.pi] + 2 * np.pi
-    return angle
-
-
 def create_plot(image):
-    """Creates image with sectors"""
-    image.unmask()
-    image.mask = True * np.ones(image.data.shape)
-
-    r, theta = image.wcs.coord(polar=True, spaxel=True)
-
-    radial_expr = (r < max_r)
-
-    for index in range(sectors):
-        if start_angles[index] > np.pi/2 and end_angles[index] < -np.pi/2: # this is the special case where we cross the -pi +pi boundary
-            sector_condition = radial_expr & ((theta < end_angles[index]) | (theta > start_angles[index]))
-        else:
-            sector_condition = radial_expr & (theta < end_angles[index]) & (theta > start_angles[index])
-
-        image.mask[sector_condition] = False
-
+    """Creates image with nrectangles"""
+    #image.unmask()
+    center = 0.5 * np.array([image.wcs.naxis2 - 1, image.wcs.naxis1 - 1])
     fig, ax = plt.subplots(subplot_kw={"projection": image.wcs.wcs})
-    x, y  = 0.5 * np.array([image.wcs.naxis1 - 1, image.wcs.naxis2 - 1])
-    # plot circles
-    [CirclePixelRegion(PixCoord(x=x, y=y), radius=radius).plot(ax=ax, facecolor='none', edgecolor='red', lw=0.5) for radius in radii[1:]]
+
+    for index in range(nrectangles):
+        angle = np.degrees(central_angles[index])
+        center_rec = center + (max_r / 2 * np.sin(central_angles[index]), max_r / 2 * np.cos(central_angles[index]))
+        RectanglePixelRegion(PixCoord(x=center_rec[1], y=center_rec[0]), width, max_r, angle=(angle - 90) * u.deg).plot(ax=ax,
+                                 facecolor="none", edgecolor="red", lw=1)
+        plt.text(center_rec[1], center_rec[0], s=index, color="red", fontsize=22)
     plt.imshow(image.data)
     plt.xlabel("Ra")
     plt.ylabel("Dec")
     basename = os.path.basename(image.filename)
-    outname = basename.replace(".fits", "_sectors_%d_max_%d.png" % (sectors, max_r))
+    outname = basename.replace(".fits", "_n_%d_max_%d.png" % (nrectangles, max_r))
     plt.savefig(outname)
     plt.close()
     print("Stored sector plot to %s" % outname)
@@ -52,76 +34,69 @@ def create_plot(image):
 ap = argparse.ArgumentParser(description='Extracts radial profiles from the input Images. All images are assumed to be the same size')
 ap.add_argument("input_images", nargs="+", help="List of images to extract the profiles from")
 ap.add_argument("--region", nargs=1, help='Region file to cut the image')
-ap.add_argument("-r", "--radius", nargs="?", help='Maximum radius for the radial profiles. Default None', default=None, type=int)
-ap.add_argument("-s", "--sectors", nargs="?", help='Number of radial directions or "sectors". Defaults to 4', default=4, type=int)
-ap.add_argument("--start_angle", nargs="?", help='Start angle offset in deg. Default 0', default=0, type=float)
+ap.add_argument("-r", "--radius", nargs="?", help='Maximum radius for the rectangles. Default uses the whole image', default=None, type=int)
+ap.add_argument("-n", "--nrect", nargs="?", help='Number of rectangles. Defaults to 4', default=4, type=int)
+ap.add_argument("-s", "--step", nargs="?", help="Radial step in pixels. Defaults to 5", default=5, type=int)
+ap.add_argument("-w", "--width", nargs="?", help="Rectangle width over which to average. Default 5", default=5, type=int)
+ap.add_argument("--offset", nargs="?", help='Offset angle in deg. Default 0', default=0, type=float)
 args = ap.parse_args()
 
-sectors = args.sectors
+nrectangles = args.nrect
 
-starting_angle = args.start_angle / 180 * np.pi
+offset = args.offset / 180 * np.pi
 
-width = 2 * np.pi / sectors / 1.2
-sections = 2 * np.pi * np.arange(0, sectors) / sectors + starting_angle + np.pi #  + img.wcs.get_rot()
-#sections = np.mod(sections + np.pi, 2 * np.pi) - np.pi
-start_angles, end_angles = sections - width / 2, sections + width / 2
-start_angles[start_angles < 0] = 2 * np.pi + start_angles[start_angles < 0]
-end_angles[end_angles > 2*np.pi] = end_angles[end_angles > 2*np.pi] - 2 * np.pi
-sections = wrap_to_pi(sections)
-start_angles = wrap_to_pi(start_angles)
-end_angles = wrap_to_pi(end_angles)
-
-end_angles = np.mod(end_angles + np.pi, 2 * np.pi) - np.pi
-width_deg = width / (2 * np.pi) * 360
-print("Splitting image into %d sectors with width = %.2f deg" % (sectors, width_deg))
+width = args.width
+central_angles = 2 * np.pi * np.arange(0, nrectangles) / nrectangles + offset
+print("Splitting image into %d rectangles with width = %.d pixels" % (nrectangles, width))
 
 img = Image(args.input_images[0])
 start = [img.wcs.naxis2 - 1, img.wcs.naxis1 - 1]
 center = 0.5 * np.array([img.wcs.naxis2 - 1, img.wcs.naxis1 - 1])
-max_img_r = np.hypot(np.abs(start[0] - center[0]), np.abs(start[1] - center[1]))
+max_img_r = np.abs(start[0] - center[0])
 max_r = args.radius if args.radius is not None else max_img_r
-radii = np.arange(0, max_r, 5)
+step = args.step
+half_step = step / 2
+half_width = args.width / 2
+radii = np.arange(0, max_r, step)
 
 if args.region is not None:
     reg = Regions.read(args.region, format="ds9")
-
 
 for image_file in args.input_images:
     image = Image(image_file)
     basename = os.path.basename(image_file)
     if args.region is not None:
-        image = image.subimage((reg[0].center.dec.to(u.deg).value, reg[0].center.ra.to(u.deg).value), size=reg[0].radius,
-                       unit_size=reg[0].radius.unit)
+        image = image.subimage((reg[0].center.dec.to(u.deg).value,
+                               reg[0].center.ra.to(u.deg).value),
+                               size=reg[0].radius, unit_size=reg[0].radius.unit)
     create_plot(image)
-    r, theta = image.wcs.coord(polar=True, spaxel=True)
+
     # mask the entire image
-    for index in range(sectors):
+    for index in range(nrectangles):
         means = []
+        center_rec = center
+        angle = np.degrees(central_angles[index])
 
         for i, radius in enumerate(radii[:-1]):
-            radial_expr = (r > radii[i]) & (r < radii[i + 1])
+            center_rec = center + (half_step * np.sin(central_angles[index]), half_step* np.cos(central_angles[index])) + ((i) * step * np.sin(central_angles[index]), i* step * np.cos(central_angles[index]))
+            image.mask_region(center_rec, (half_width, half_step), unit_center=None, unit_radius=None,
+                              posangle=angle - 90, inside=False)
 
-            image.mask = True * np.ones(image.data.shape)
-
-            if start_angles[index] > np.pi/2 and end_angles[index] < -np.pi/2: # this is the special case where we cross the -pi +pi boundary
-                sector_condition = radial_expr & ((theta < end_angles[index]) | (theta > start_angles[index]))
-            else:
-                sector_condition = radial_expr & (theta < end_angles[index]) & (theta > start_angles[index])
-            image.mask[sector_condition] = False #mask_selection(sector)
-            image.mask[np.isnan(image.data)] = True
             avg_r = np.mean(image.data)
             means.append(avg_r)
+            image.unmask() # unmask for next radius
+
         outputs = np.array([radii[:-1], means])
         np.savetxt(basename.replace(".fits", "%d.dat" % index), outputs.T, header="r\tmean", fmt="%.4f")
 
 import glob
-files = glob.glob(basename.replace(".fits", "[0-%d].dat" % (sectors - 1 )))
+files = glob.glob(basename.replace(".fits", "[0-%d].dat" % (nrectangles - 1 )))
 
 for file in files:
     data = np.genfromtxt(file, names=True)
-    plt.plot(data["r"] * img.get_step(unit=u.arcsec)[0], data["mean"], label=file)
+    plt.plot(data["r"] * img.get_step(unit=u.arcsec)[0], data["mean"],"-o", label=file)
 
 plt.legend()
 plt.xlabel("Radial distance (arcsec)")
 plt.ylabel("Flux")
-plt.savefig(basename.replace(".fits", "_profile_%d.png" % sectors))
+plt.savefig(basename.replace(".fits", "_profile_%d.png" % nrectangles))
