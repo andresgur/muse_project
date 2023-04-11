@@ -39,11 +39,15 @@ os.chdir('tables')
 
 ''' DATABASE CONNECTION'''
 
-# Get credentials stored from the environment variables
-host = os.environ['MdB_HOST']
-user = os.environ['MdB_USER']
-passwd = os.environ['MdB_PASSWD']
-port = os.environ['MdB_PORT']
+#no need for these as of now
+#export MdB_DBs='3MdBs'
+#export MdB_DBp='3MdB'
+#export MdB_DB_17='3MdB_17'
+
+host = '3mdb.astro.unam.mx'
+user = 'OVN_user'
+passwd = 'oiii5007'
+port = '3306'                      
                                 
 # Connect to the database
 db = pymysql.connect(host=host, user=user, passwd=passwd, port=int(port), db='3MdBs')
