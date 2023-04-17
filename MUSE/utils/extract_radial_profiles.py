@@ -9,6 +9,8 @@ from regions import RectanglePixelRegion
 from regions import PixCoord
 
 
+plt.style.use('~/.config/matplotlib/stylelib/paper.mplstyle')
+
 def create_plot(image):
     """Creates image with nrectangles"""
     #image.unmask()
@@ -19,13 +21,16 @@ def create_plot(image):
         angle = np.degrees(central_angles[index])
         center_rec = center + (max_r / 2 * np.sin(central_angles[index]), max_r / 2 * np.cos(central_angles[index]))
         RectanglePixelRegion(PixCoord(x=center_rec[1], y=center_rec[0]), width, max_r, angle=(angle - 90) * u.deg).plot(ax=ax,
-                                 facecolor="none", edgecolor="red", lw=1)
-        plt.text(center_rec[1], center_rec[0], s=index, color="red", fontsize=22)
-    plt.imshow(image.data)
-    plt.xlabel("Ra")
-    plt.ylabel("Dec")
+                                 facecolor="none", edgecolor="white", lw=2)
+        plt.text(center_rec[1], center_rec[0], s=index, color="white", fontsize=22)
+    image.plot(ax=ax, colorbar="v", scale='linear', show_xlabel=False, show_ylabel=False, zscale=True, cmap="cividis")
+    im = ax.images
+    im[-1].colorbar.ax.set_ylabel("[O III]$\lambda$5007/H$\\beta$", fontsize=18)
+    im[-1].colorbar.ax.yaxis.set_label_position('right')
+    ax.set_xlabel("Ra")
+    ax.set_ylabel("Dec", labelpad=-1)
     basename = os.path.basename(image.filename)
-    outname = basename.replace(".fits", "_n_%d_max_%d.png" % (nrectangles, max_r))
+    outname = basename.replace(".fits", "_n_%d_max_%d_w%d.pdf" % (nrectangles, max_r, width))
     plt.savefig(outname)
     plt.close()
     print("Stored sector plot to %s" % outname)
@@ -33,7 +38,7 @@ def create_plot(image):
 
 ap = argparse.ArgumentParser(description='Extracts radial profiles from the input Images. All images are assumed to be the same size')
 ap.add_argument("input_images", nargs="+", help="List of images to extract the profiles from")
-ap.add_argument("--region", nargs=1, help='Region file to cut the image')
+ap.add_argument("--region", nargs=1, help='Region file to cut the image', default=None)
 ap.add_argument("-r", "--radius", nargs="?", help='Maximum radius for the rectangles. Default uses the whole image', default=None, type=int)
 ap.add_argument("-n", "--nrect", nargs="?", help='Number of rectangles. Defaults to 4', default=4, type=int)
 ap.add_argument("-s", "--step", nargs="?", help="Radial step in pixels. Defaults to 5", default=5, type=int)
@@ -60,7 +65,7 @@ half_width = args.width / 2
 radii = np.arange(0, max_r, step)
 
 if args.region is not None:
-    reg = Regions.read(args.region, format="ds9")
+    reg = Regions.read(args.region[0], format="ds9")
 
 for image_file in args.input_images:
     image = Image(image_file)
@@ -68,7 +73,7 @@ for image_file in args.input_images:
     if args.region is not None:
         image = image.subimage((reg[0].center.dec.to(u.deg).value,
                                reg[0].center.ra.to(u.deg).value),
-                               size=reg[0].radius, unit_size=reg[0].radius.unit)
+                               size=reg[0].radius.to(u.arcsec).value, unit_size=reg[0].radius.to(u.arcsec).unit)
     create_plot(image)
 
     # mask the entire image
@@ -87,10 +92,10 @@ for image_file in args.input_images:
             image.unmask() # unmask for next radius
 
         outputs = np.array([radii[:-1], means])
-        np.savetxt(basename.replace(".fits", "%d.dat" % index), outputs.T, header="r\tmean", fmt="%.4f")
+        np.savetxt(basename.replace(".fits", "_%d.dat" % index), outputs.T, header="r\tmean", fmt="%.4f")
 
 import glob
-files = glob.glob(basename.replace(".fits", "[0-%d].dat" % (nrectangles - 1 )))
+files = glob.glob(basename.replace(".fits", "") + "_[0-%d].dat" % (nrectangles - 1 ))
 
 for file in files:
     data = np.genfromtxt(file, names=True)
