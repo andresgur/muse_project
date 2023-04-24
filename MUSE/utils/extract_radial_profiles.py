@@ -7,6 +7,7 @@ import os
 import astropy.units as u
 from regions import RectanglePixelRegion
 from regions import PixCoord
+import glob
 
 
 plt.style.use('~/.config/matplotlib/stylelib/paper.mplstyle')
@@ -25,7 +26,7 @@ def create_plot(image):
         plt.text(center_rec[1], center_rec[0], s=index, color="white", fontsize=22)
     image.plot(ax=ax, colorbar="v", scale='linear', show_xlabel=False, show_ylabel=False, zscale=True, cmap="cividis")
     im = ax.images
-    im[-1].colorbar.ax.set_ylabel("[O III]$\lambda$5007/H$\\beta$", fontsize=18)
+    im[-1].colorbar.ax.set_ylabel("Flux (%s)" % img.primary_header["BUNIT"], fontsize=18)
     im[-1].colorbar.ax.yaxis.set_label_position('right')
     ax.set_xlabel("Ra")
     ax.set_ylabel("Dec", labelpad=-1)
@@ -54,7 +55,7 @@ width = args.width
 central_angles = 2 * np.pi * np.arange(0, nrectangles) / nrectangles + offset
 print("Splitting image into %d rectangles with width = %.d pixels" % (nrectangles, width))
 
-img = Image(args.input_images[0])
+img = Image(args.input_images[0], ext=1)
 start = [img.wcs.naxis2 - 1, img.wcs.naxis1 - 1]
 center = 0.5 * np.array([img.wcs.naxis2 - 1, img.wcs.naxis1 - 1])
 max_img_r = np.abs(start[0] - center[0])
@@ -68,7 +69,7 @@ if args.region is not None:
     reg = Regions.read(args.region[0], format="ds9")
 
 for image_file in args.input_images:
-    image = Image(image_file)
+    image = Image(image_file, ext=1)
     basename = os.path.basename(image_file)
     if args.region is not None:
         image = image.subimage((reg[0].center.dec.to(u.deg).value,
@@ -79,6 +80,7 @@ for image_file in args.input_images:
     # mask the entire image
     for index in range(nrectangles):
         means = []
+        stds = []
         center_rec = center
         angle = np.degrees(central_angles[index])
 
@@ -88,20 +90,23 @@ for image_file in args.input_images:
                               posangle=angle - 90, inside=False)
 
             avg_r = np.mean(image.data)
+            std_r = np.std(image.data)
             means.append(avg_r)
+            stds.append(std_r)
             image.unmask() # unmask for next radius
 
-        outputs = np.array([radii[:-1], means])
-        np.savetxt(basename.replace(".fits", "_%d.dat" % index), outputs.T, header="r\tmean", fmt="%.4f")
+        outputs = np.array([radii[:-1], means, stds])
+        np.savetxt(basename.replace(".fits", "_%d.dat" % index), outputs.T, header="r\tmean\tstd", fmt="%.4f")
 
-import glob
-files = glob.glob(basename.replace(".fits", "") + "_[0-%d].dat" % (nrectangles - 1 ))
+    files = glob.glob(basename.replace(".fits", "") + "_[0-%d].dat" % (nrectangles - 1 ))
 
-for file in files:
-    data = np.genfromtxt(file, names=True)
-    plt.plot(data["r"] * img.get_step(unit=u.arcsec)[0], data["mean"],"-o", label=file)
+    plt.figure()
+    for file in files:
+        data = np.genfromtxt(file, names=True)
+        plt.errorbar(data["r"] * img.get_step(unit=u.arcsec)[0], data["mean"],yerr=data["std"], fmt="-o", label=file)
 
-plt.legend()
-plt.xlabel("Radial distance (arcsec)")
-plt.ylabel("Flux")
-plt.savefig(basename.replace(".fits", "_profile_%d.png" % nrectangles))
+    plt.legend()
+    plt.xlabel("Radial distance (arcsec)")
+    plt.ylabel("Flux (%s)" % img.primary_header["BUNIT"])
+    plt.savefig(basename.replace(".fits", "_profile_%d.png" % nrectangles))
+    plt.close()
