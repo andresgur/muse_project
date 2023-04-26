@@ -42,6 +42,11 @@ Extraction regions             |  Radial averaged profiles
 ![Extraction regions](images/OIII5007_HBETAratio_n_4_max_70.png)  |  ![Radial profile](images/OIII5007_HBETAratio_profile_4.png)
 
 
+adjust_coordinates.py --> Runs a cross-correlation between an input reference image and the cube and estimates the offset needed to adjust the cube coordinates to the reference image (uses mpdaf estimate_coordinate_offset and adjust_coordinates)
+
+python adjust_coordinates.py cube.fits --hst <ref image, typically HST>
+
+
 ----MAPPINGS-----
 
 read_mappings.py --> Script to obtain predicted line ratios from the mapping libraries (python read_mappings.py <files> (for instance V_*_b0_001_s_lines.txt V_*b1_s_lines.txt [MVQP]_*b[0e]_s_lines.txt [MVQ]_*b10_s_lines.txt T_*b0_001_s_lines.txt T_*b1_s_* T_*b10_s_lines.txt). The script will read the paths to the BPT diagrams from bpt_config.py file
