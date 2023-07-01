@@ -56,7 +56,8 @@ read_mappingsV.py --> Script to obtain predicted line ratios from the mapping V 
 -------BPT-------
 
 bpt_newer.py -> bpt diagram from Law et al. 2021, now with geometry
-
+bpt_colored.py -> Creates .fits and pngs of BPT diagrams using Law+2021 that are colored for better visualization
+python bpt_colored.py --config config_file (see an example in config_files)
 
 # Acknowledging
 
