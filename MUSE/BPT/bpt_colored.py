@@ -25,8 +25,8 @@ import muse_utils as mu
 from matplotlib.colors import ListedColormap
 from line_utils import ratio_maker
 from astropy.wcs import WCS
-import configparser
-
+from configparser import ConfigParser, ExtendedInterpolation
+from bpt.bpt import BPT_1, BPT_2, BPT_3
 
 class BPT_region:
     """Wrapper for the regions of the BPT diagram.
@@ -51,58 +51,16 @@ class BPT_diagram:
     ----------
     index: int
         Index to keep track of each region (1, 2 or 3)
-    name: str
-        Name of the region (for plotting purposes mainly i.e. HII, LINER, etc)
-    color: str
-        Color to assign to this region be used in plots
     """
     def __init__(self, index):
         self.index = index
 
         self.y_axis="log([OIII]/H$_\\beta$)"
-        if self.index == 1:
-            self.x_axis="log([NII]/H$_\\alpha$)"
-            self.agnliner_inter = (-0.24, 0.5)
-            self.int_inter = (-0.61, 1)
-            self.limit = -0.032
-        elif self.index == 2:
-            self.x_axis="log([SII]/H$_\\alpha$)"
-            self.agnliner_inter = (-0.22, 0.3)
-            self.int_inter = (-1.1, 1)
-            self.limit = 0.198
-        elif self.index == 3:
-            self.x_axis="log([OI]/H$_\\alpha$)"
-            self.agnliner_inter = (-0.9, 0.3)
-            self.int_inter = (-0.25, 0.65)
-            self.limit = -0.360
 
         if self.index=='proj':
             self.x_axis="P1 (0.77*N2+0.54*S2+0.33*R3)"
             self.y_axis="P2 (-0.57*N2+0.82*S2)"
 
-    def pure_starform_crv(self, logx):
-        if self.index == 1:
-            return 0.359 / (logx + 0.032) + 1.083
-        elif self.index == 2:
-            return 0.41 / (logx - 0.198) + 1.164
-        elif self.index == 3:
-            return 0.612 / (logx + 0.360) + 1.179
-
-    def int_crv(self, logy):
-        if self.index == 1:
-            return -0.479 * logy ** 4 - 0.594 * logy ** 3 - 0.542 * logy**2-0.056*logy-0.143
-        elif self.index == 2:
-            return -0.943*logy**4-0.45*logy**3+0.408*logy**2-0.61*logy-0.025
-        elif self.index == 3:
-            return 18.664*logy**4-36.343*logy**3+22.238*logy**2-6.134*logy-0.283
-
-    def agnliner_crv(self, logx):
-        if self.index == 1:
-            return 0.95 * logx + 0.56
-        elif self.index == 2:
-            return 1.89 * logx + 0.76
-        elif self.index == 3:
-            return 1.18 * logx + 1.3
 
     def proj_x(self,logN2,logS2,logR3):
         return 0.77 * logN2 + 0.54 * logS2 + 0.33* logR3
@@ -161,7 +119,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     x_axis_map = fits.open(map_1)
     logx = np.log10(x_axis_map[0].data.data)
-    invalid_pixels = np.where((np.isnan(logx)) | (np.isnan(logy)) | (np.isinf(logy)) | (np.isinf(logx)) )
+    invalid_pixels = np.where((np.isnan(logx)) | (np.isnan(logy)))
 
     #logx = logx[invalid_pixels]
     #logy = logy[invalid_pixels]
@@ -174,7 +132,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     #since the curves lead to wrong auto plot adjustments, we do it ourselves
     offset = 0.04
-    valid_indexes = ~((np.isnan(logx)) | (np.isnan(logy)) | (np.isinf(logx)) | (np.isinf(logy)) | (logy == 0) | (logx ==0))
+    valid_indexes = ~((np.isnan(logx)) | (np.isnan(logy)) | (np.isinf(logx)) | (np.isinf(logy)))
     min_logx = np.nanmin(logx[valid_indexes])
     max_logx = np.nanmax(logx[valid_indexes])
     min_logy = np.nanmin(logy[valid_indexes])
@@ -186,41 +144,50 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
     if grid_ax is not None:
         grid_ax.set_xlim(min_logx-out_x, max_logx+out_x)
         grid_ax.set_ylim(min_logy-out_y, max_logy+out_y)
-    bpt_diagram = BPT_diagram(bptype)
+    if bpt_type == 1:
+        bpt_diagram = BPT_1()
+    elif bpt_type==2:
+        bpt_diagram = BPT_2()
+    elif bpt_type==3:
+        bpt_diagram = BPT_3()
 
     ax.set_xlabel(bpt_diagram.x_axis)
     ax.set_ylabel(bpt_diagram.y_axis)
 
     if grid_ax is not None:
         grid_ax.set_xlabel(bpt_diagram.x_axis)
-    # defining each region
+    # defining each separation line
     pure_starform = bpt_diagram.pure_starform_crv(logx)
-    int_curve = bpt_diagram.int_crv(logy)
+    int_curve = bpt_diagram.intermediate_crv(logy)
     agnliner_curve = bpt_diagram.agnliner_crv(logx)
+
+    # classify
     starform_regions = np.where(logy < pure_starform)
     bpt_data[starform_regions] = logx[starform_regions] + logy[starform_regions]
     bpt_indexes[starform_regions] = 0
-    int_regions = np.where((logy > pure_starform) & (logx < int_curve))
+    # the star forming region diverges beyond limit, so we need to add this other condition
+    int_regions = np.where(((logy > pure_starform) & (logx < int_curve)) | (logx > bpt_diagram.limit))
     bpt_data[int_regions] = logx[int_regions] + logy[int_regions]
     bpt_indexes[int_regions] = 1
-    agn_regions = np.where((logx > int_curve) & (logy > agnliner_curve))
+    # careful the int line does not work above 1.1
+    agn_regions = np.where(((logx > int_curve) | (logy > 1.1)) & (logy > agnliner_curve))
     bpt_data[agn_regions] = logx[agn_regions] + logy[agn_regions]
     bpt_indexes[agn_regions] = 2
-    liner_regions = np.where((logx > int_curve) & (logy < agnliner_curve))
+    # careful the int line does not work above 1.1
+    liner_regions = np.where(((logx > int_curve) | (logy > 1.1)) & (logy < agnliner_curve))
     bpt_data[liner_regions] = logx[liner_regions] + logy[liner_regions]
     bpt_indexes[liner_regions] = 3
     bpt_data[invalid_pixels] = np.nan
 
-    #plotting the separations
+    # plot the separations
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
-
-    #avoid divergence
+    # avoid divergence and
     inter_good_values = inter_starform[np.where(inter_starform < bpt_diagram.limit)]
     ax.plot(inter_good_values, bpt_diagram.pure_starform_crv(inter_good_values), color="black", zorder=100)
-
+    # set some limits over the lines so they look beautiful
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
     inter_def = np.sort(inter_def[inter_def < bpt_diagram.int_inter[1]])
-    ax.plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
+    ax.plot(bpt_diagram.intermediate_crv(inter_def), inter_def, color='black', zorder=100)
 
     agnliner_def = logx[logx > bpt_diagram.agnliner_inter[0]]
     agnliner_def = np.sort(agnliner_def[agnliner_def < bpt_diagram.agnliner_inter[1]])
@@ -229,7 +196,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     if grid_ax is not None:
         grid_ax.plot(inter_good_values, bpt_diagram.pure_starform_crv(inter_good_values), color="black", zorder=100)
-        grid_ax.plot(bpt_diagram.int_crv(inter_def), inter_def, color='black', zorder=100)
+        grid_ax.plot(bpt_diagram.intermediate_crv(inter_def), inter_def, color='black', zorder=100)
         grid_ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
     regions = [starform_regions, int_regions, agn_regions, liner_regions]
     # ploting the regions
@@ -350,7 +317,7 @@ ap = argparse.ArgumentParser(description='Create BPT diagram from two given line
 ap.add_argument("-r", "--regions", nargs='*', help="Region files to be overlaid on the image", default=None)
 ap.add_argument("-c", "--contours", nargs='?', help="Fits file to use to overlay contours", type=str)
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='bpt_diagrams_v2', type=str)
-ap.add_argument("--config", nargs=1, help="Input config file (optional)", required=False)
+ap.add_argument("--config", nargs=1, help="Input config file", required=True)
 args = ap.parse_args()
 
 # create output dir
@@ -365,80 +332,84 @@ bpt_lines=[[['OIII5007'],['HBETA']],
            [['SII6716','SII6731'],['HALPHA']],
            [['OI6300'],['HALPHA']]]
 
-if args.config is not None:
-    if os.path.isfile('%s/.config/matplotlib/stylelib/paper.mplstyle' % os.environ["HOME"]):
-        plt.style.use('/home/agurpide/.config/matplotlib/stylelib/paper.mplstyle')
-    bptcfg = configparser.ConfigParser()
-    bptcfg.read("%s" %args.config[0])
+# define colors for each BPT region
+colormap = ["Blues", "Greens", "Purples", "Oranges"]
 
-    bpt_type = bptcfg["bpt"]["diagram"]
-    lineratio_paths = bptcfg["paths"]
-    lineratiomaps = [lineratio_paths["n2_ha"], lineratio_paths["s2_ha"], lineratio_paths["oI_ha"]]
+if os.path.isfile('%s/.config/matplotlib/stylelib/paper.mplstyle' % os.environ["HOME"]):
+    plt.style.use('%s/.config/matplotlib/stylelib/paper.mplstyle'  % os.environ["HOME"])
 
-    '''STANDARD DIAGRAMS'''
+# read config file
+bptcfg = ConfigParser(interpolation=ExtendedInterpolation())
+bptcfg.read("%s" %args.config[0])
 
-    ymap = Image(lineratio_paths["o3_hb"])
-    print("WARNING: values below -1.0 for  [OIII]/Hb are being ignored")
-    ymap.data[np.where(np.log10(ymap.data) < -1.0)] = np.nan
-    logy = np.log10(ymap.data.data)
-    colormap = ["Blues", "Greens", "Purples", "Oranges"]
+bpt_type = bptcfg["bpt"]["diagram"]
+lineratio_paths = bptcfg["Paths"]
+lineratiomaps = [lineratio_paths["n2_ha"], lineratio_paths["s2_ha"], lineratio_paths["oI_ha"]]
 
-    grid_figure, grid_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, figsize=(25.6, 9.8))
-    grid_img_figure, grid_im_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, subplot_kw={'projection': ymap.wcs.wcs}, figsize=(25.6, 9.8))
-    grid_axes[0].set_ylabel("log([OIII]/H$_\\beta$)")
+'''STANDARD DIAGRAMS'''
 
-    grid_im_axes[0].set_ylabel('Dec', labelpad=-2)
+ymap = Image(lineratio_paths["o3_hb"])
+print("WARNING: values below -1.0 for  [OIII]/Hb are being ignored")
+ymap.data[np.where(np.log10(ymap.data) < -1.0)] = np.nan
+logy = np.log10(ymap.data.data)
 
-    for myax in grid_im_axes[1:]:
-        myax.coords[1].set_auto_axislabel(False)
-        myax.coords[1].set_ticklabel_visible(False)
+grid_figure, grid_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, figsize=(25.6, 9.8))
+grid_img_figure, grid_im_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, subplot_kw={'projection': ymap.wcs.wcs}, figsize=(25.6, 9.8))
+grid_axes[0].set_ylabel("log([OIII]/H$_\\beta$)")
 
-    for i, ratiomap in enumerate(lineratiomaps):
-        bpt_type = i + 1
-        bpt_fits, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions, args.contours, bpt_type, colormap, grid_axes[i])
+grid_im_axes[0].set_ylabel('Dec', labelpad=-2)
 
-        outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
-        figure.savefig("%s/coloredBPT_%d.png" % (outdir, bpt_type))
-        bpt_fits.writeto(outfile, overwrite=True)
-        bpt_img = Image(outfile)
+for myax in grid_im_axes[1:]:
+    myax.coords[1].set_auto_axislabel(False)
+    myax.coords[1].set_ticklabel_visible(False)
 
-        img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
-        for index, map in enumerate(colormap):
-            mask = ((bpt_indexes != index) | (np.isnan(bpt_indexes)))
-            region = np.ma.masked_array(bpt_img.data, mask)
-            if region.size == 0:
-                continue
-            cmap = mpl.cm.get_cmap(map)
-            norm = mpl.colors.Normalize(vmin=np.nanmin(region) - 0.2, vmax=np.nanmax(region))
-            ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
-            grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
+for i, ratiomap in enumerate(lineratiomaps):
+    bpt_type = i + 1
+    bpt_fits, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions,
+                                               args.contours, bpt_type, colormap, grid_axes[i])
 
-        grid_im_axes[i].set_xlabel('Ra', labelpad=1)
-        ax.set_xlabel('Ra', labelpad=1)
-        ax.set_ylabel('Dec', labelpad=-2)
-        if args.contours is not None:
-            ctrs = fits.open(args.contours)
-            # sometimes the data is in the 1 or the 0 hdu list
-            file_data = ctrs[1].data if ctrs[0].data is None else ctrs[0].data
-            min_data = np.nanpercentile(file_data, 30)
-            max_data = np.nanpercentile(file_data, 87)
-            levels = np.linspace(min_data, max_data, 3)
-            print(levels)
-            cmp = ListedColormap(["black"])
-            cs = ax.contour(file_data, levels=levels, alpha=0.95, origin="lower", cmap=cmp, zorder=2, linestyles=[":", "--", "solid"])
-            #ax.clabel(cs, cs.levels, inline=True, fmt="%d", fontsize=20)
+    outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
+    figure.savefig("%s/coloredBPT_%d.png" % (outdir, bpt_type))
+    bpt_fits.writeto(outfile, overwrite=True)
+    bpt_img = Image(outfile)
 
-        if args.regions is not None:
-            for region in args.regions:
-                mu.plot_regions(region, ax, bpt_img.data_header)
-                mu.plot_regions(region, grid_im_axes[i], bpt_img.data_header)
-        img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4, dpi=200)
-    grid_figure.savefig("%s/grid_bpts.png" % outdir)
-    grid_img_figure.savefig("%s/grid_img_bpt.pdf" % outdir, bbox_inches="tight", pad_inches=0.4, dpi=200)
+    img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
+    for index, map in enumerate(colormap):
+        mask = ((bpt_indexes != index) | (np.isnan(bpt_indexes)))
+        region = np.ma.masked_array(bpt_img.data, mask)
+        if region.size == 0:
+            continue
+        cmap = mpl.cm.get_cmap(map)
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region) - 0.2, vmax=np.nanmax(region))
+        ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
+        grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
+
+    grid_im_axes[i].set_xlabel('Ra', labelpad=1)
+    ax.set_xlabel('Ra', labelpad=1)
+    ax.set_ylabel('Dec', labelpad=-2)
+    if args.contours is not None:
+        ctrs = fits.open(args.contours)
+        # sometimes the data is in the 1 or the 0 hdu list
+        file_data = ctrs[1].data if ctrs[0].data is None else ctrs[0].data
+        min_data = np.nanpercentile(file_data, 30)
+        max_data = np.nanpercentile(file_data, 87)
+        levels = np.linspace(min_data, max_data, 3)
+        print(levels)
+        cmp = ListedColormap(["black"])
+        cs = ax.contour(file_data, levels=levels, alpha=0.95, origin="lower", cmap=cmp, zorder=2, linestyles=[":", "--", "solid"])
+        #ax.clabel(cs, cs.levels, inline=True, fmt="%d", fontsize=20)
+
+    if args.regions is not None:
+        for region in args.regions:
+            mu.plot_regions(region, ax, bpt_img.data_header)
+            mu.plot_regions(region, grid_im_axes[i], bpt_img.data_header)
+    img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4, dpi=200)
     print("Results stored to %s" % outfile)
+grid_figure.savefig("%s/grid_bpts.png" % outdir)
+grid_img_figure.savefig("%s/grid_img_bpt.pdf" % outdir, bbox_inches="tight", pad_inches=0.4, dpi=200)
 
-    '''PROJECTION DIAGRAM'''
-
+'''PROJECTION DIAGRAM'''
+if False:
     ymap_proj = lineratio_paths["o3_hb"]
     colormap_proj = ["Blues", "Greens", "Reds"]
 
@@ -480,19 +451,4 @@ if args.config is not None:
 
     img_figure_proj.savefig(outfile.replace(".fits", "image.png"), bbox_inches="tight", pad_inches=0.4)
 
-    print("Results stored to %s" % outfile)
-
-else:
-    print("Running in maxime noob mode let's goooo")
-    sdir='/home/mparra/PARRA/Observ/Andres/optical/'
-    os.chdir(sdir)
-
-    r_results,r_names=ratio_maker(bpt_lines,'flux',outdir)
-
-    if r_results[0]=='Unavailable' or r_results[1]==r_results[2]==r_results[3]=='Unavailable':
-        print("Can't compute the BPT, too many ratios missing.")
-    else:
-        for i in range(1, 4):
-            if r_results[i]=='Done':
-                print('BPT graph '+str(i)+' can be plotted.')
-                bpt_single(r_names[i],r_names[0], args.regions, args.contours, i, colormap)
+print("Results stored to %s" % outfile)
