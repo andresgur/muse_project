@@ -14,7 +14,6 @@ and manually specify the starting line ratio files instead of doing an automatic
 # imports
 import sys
 import os
-sys.path.append('/home/mparra/PARRA/Scripts/Python/MUSE/BPT')
 import argparse
 import numpy as np
 from astropy.io import fits
@@ -28,21 +27,6 @@ from astropy.wcs import WCS
 from configparser import ConfigParser, ExtendedInterpolation
 from bpt.bpt import BPT_1, BPT_2, BPT_3
 
-class BPT_region:
-    """Wrapper for the regions of the BPT diagram.
-    Parameters
-    ----------
-    index: int
-        Index to keep track of each region (0, 1, 2 or 3)
-    name: str
-        Name of the region (for plotting purposes mainly i.e. HII, LINER, etc)
-    color: str
-        Color to assign to this region be used in plots
-    """
-    def __init__(self, index, color, name):
-        self.index = index
-        self.name = name
-        self.color = color
 
 
 class BPT_diagram:
@@ -162,28 +146,30 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
     agnliner_curve = bpt_diagram.agnliner_crv(logx)
 
     # classify
-    starform_regions = np.where(logy < pure_starform)
-    bpt_data[starform_regions] = logx[starform_regions] + logy[starform_regions]
-    bpt_indexes[starform_regions] = 0
+
     # the star forming region diverges beyond limit, so we need to add this other condition
-    int_regions = np.where(((logy > pure_starform) & (logx < int_curve)) | (logx > bpt_diagram.limit))
+    int_regions = np.where(((logy > pure_starform) & (logx <= int_curve)) | (logx > bpt_diagram.limit))
     bpt_data[int_regions] = logx[int_regions] + logy[int_regions]
     bpt_indexes[int_regions] = 1
-    # careful the int line does not work above 1.1
-    agn_regions = np.where(((logx > int_curve) | (logy > 1.1)) & (logy > agnliner_curve))
+    # careful the int line does not work above a given limit
+    agn_regions = np.where(((logx > int_curve) | (logy > bpt_diagram.int_inter[1])) & (logy > agnliner_curve))
     bpt_data[agn_regions] = logx[agn_regions] + logy[agn_regions]
     bpt_indexes[agn_regions] = 2
-    # careful the int line does not work above 1.1
-    liner_regions = np.where(((logx > int_curve) | (logy > 1.1)) & (logy < agnliner_curve))
+    # careful the int line does not work above a given limit
+    liner_regions = np.where(((logy > pure_starform) | (logx > bpt_diagram.limit)) & (logy < agnliner_curve) & ((logx > int_curve) | (logy > bpt_diagram.int_inter[1])))
     bpt_data[liner_regions] = logx[liner_regions] + logy[liner_regions]
     bpt_indexes[liner_regions] = 3
     bpt_data[invalid_pixels] = np.nan
 
+    starform_regions = np.where(logy < pure_starform)
+    bpt_data[starform_regions] = logx[starform_regions] + logy[starform_regions]
+    bpt_indexes[starform_regions] = 0
     # plot the separations
     inter_starform = np.sort(np.reshape(logx, np.size(logx)))
     # avoid divergence and
     inter_good_values = inter_starform[np.where(inter_starform < bpt_diagram.limit)]
     ax.plot(inter_good_values, bpt_diagram.pure_starform_crv(inter_good_values), color="black", zorder=100)
+
     # set some limits over the lines so they look beautiful
     inter_def = logy[logy > bpt_diagram.int_inter[0]]
     inter_def = np.sort(inter_def[inter_def < bpt_diagram.int_inter[1]])
