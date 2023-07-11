@@ -64,8 +64,9 @@ class BPT_1(BPT):
     def __init__(self):
         super().__init__()
         self.x_axis="log([NII]/H$_\\alpha$)"
-        self.limit = -0.032
-        self.int_inter = (-0.61, 1)
+        self.limit = -0.023
+        self.int_inter = (-0.65, 1)
+        # values from Section 4 Law+2021
         self.agnliner_inter = (-0.24, 0.5)
         self.x_axis="log([NII]/H$_\\alpha$)"
 
@@ -80,7 +81,8 @@ class BPT_2(BPT):
     def __init__(self):
         super().__init__()
         self.limit = 0.324
-        self.int_inter = (-1.1, 0.8)
+        self.int_inter = (-1.1, 1.10)
+        # values from Section 4 Law+2021
         self.agnliner_inter = (-0.22, 0.3)
         self.x_axis="log([SII]/H$_\\alpha$)"
     def pure_starform_crv(self, logx):
@@ -95,7 +97,8 @@ class BPT_3(BPT):
         super().__init__()
         self.limit = -0.124
         self.int_inter = (-0.25, 0.6)
-        self.agnliner_inter = (-0.9, 0.5)
+        # values from Section 4 Law+2021
+        self.agnliner_inter = (-0.9, 0.3)
         self.x_axis="log([OI]/H$_\\alpha$)"
 
     def pure_starform_crv(self, logx):
