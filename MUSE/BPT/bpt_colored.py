@@ -192,7 +192,8 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
             continue
         cmap = mpl.cm.get_cmap(map)
         # apply offset to the minimum avoid very light colors
-        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region]) - 0.2, vmax=np.nanmax(bpt_data[region]))
+        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region], 0) - 0.2,
+                                     vmax=np.nanpercentile(bpt_data[region], 99))
         ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
@@ -285,7 +286,8 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
             continue
         cmap = mpl.cm.get_cmap(map)
         # apply offset to avoid very white regions
-        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region]) - 0.2, vmax=np.nanmax(bpt_data[region]))
+        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region], 0) - 0.2,
+                                             vmax=np.nanpercentile(bpt_data[region], 99))
         ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
@@ -366,7 +368,8 @@ for i, ratiomap in enumerate(lineratiomaps):
         if region.size == 0:
             continue
         cmap = mpl.cm.get_cmap(map)
-        norm = mpl.colors.Normalize(vmin=np.nanmin(region) - 0.2, vmax=np.nanmax(region))
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region.data) - 0.2,
+                                             vmax=np.nanpercentile(region.data, 99))
         ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
         grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
 
