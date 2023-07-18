@@ -147,6 +147,8 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     # classify
 
+    bpt_data[invalid_pixels] = np.nan
+    bpt_indexes[invalid_pixels] = np.nan
     # the star forming region diverges beyond limit, so we need to add this other condition
     int_regions = np.where(((logy > pure_starform) & (logx <= int_curve)) | (logx > bpt_diagram.limit))
     bpt_data[int_regions] = logx[int_regions] + logy[int_regions]
@@ -159,7 +161,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
     liner_regions = np.where(((logy > pure_starform) | (logx > bpt_diagram.limit)) & (logy < agnliner_curve) & ((logx > int_curve) | (logy > bpt_diagram.int_inter[1])))
     bpt_data[liner_regions] = logx[liner_regions] + logy[liner_regions]
     bpt_indexes[liner_regions] = 3
-    bpt_data[invalid_pixels] = np.nan
+
 
     starform_regions = np.where(logy < pure_starform)
     bpt_data[starform_regions] = logx[starform_regions] + logy[starform_regions]
@@ -198,12 +200,30 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
     ax.legend()
-    bpt_fits = fits.PrimaryHDU(data=bpt_data, header=x_axis_map[0].header)
+
+    # save fits files
+    # colored maps
+    outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
+    data = bpt_data
+    bpt_fits = fits.PrimaryHDU(data=data, header=x_axis_map[0].header)
     if "WCSAXES" in bpt_fits.header:
         if bpt_fits.header["WCSAXES"] == 3:
             bpt_fits.header["WCSAXES"] = 2
     bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
-    return bpt_fits, bpt_indexes, figure
+    bpt_fits.writeto(outfile, overwrite=True)
+    # single indexes maps
+    outfile = "%s/BPT_%d.fits" % (outdir, bpt_type)
+    data = bpt_indexes
+    bpt_fits = fits.PrimaryHDU(data=data, header=x_axis_map[0].header)
+    if "WCSAXES" in bpt_fits.header:
+        if bpt_fits.header["WCSAXES"] == 3:
+            bpt_fits.header["WCSAXES"] = 2
+    bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
+    bpt_fits.writeto(outfile, overwrite=True)
+    # save figure
+    figure.savefig("%s/coloredBPT_%d.png" % (outdir, bpt_type))
+    plt.close(figure)
+    return bpt_indexes
 
 
 def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
@@ -353,12 +373,9 @@ for myax in grid_im_axes[1:]:
 
 for i, ratiomap in enumerate(lineratiomaps):
     bpt_type = i + 1
-    bpt_fits, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions,
+    bpt_indexes = bpt_single(ratiomap, logy, args.regions,
                                                args.contours, bpt_type, colormap, grid_axes[i])
-
     outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
-    figure.savefig("%s/coloredBPT_%d.png" % (outdir, bpt_type))
-    bpt_fits.writeto(outfile, overwrite=True)
     bpt_img = Image(outfile)
 
     img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
