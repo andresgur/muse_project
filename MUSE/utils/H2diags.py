@@ -1,6 +1,6 @@
-# @Author: Maxime Parra
-# @Date:   02-05-2021
-# @Email:  maxime.parra@irap.omp.eu
+# @Author: Maxime Parra and Andres Gurpide
+# @Date:   02-05-2023
+# @Email:  maxime.parra@univ-grenoble-alpes.fr
 
 '''
 Strong line metallicity and ionization parameter estimations from Pilyugin et al. 2016 and Dors et al. 2017.
@@ -11,24 +11,33 @@ papers :
 Pilyugin et al. 2016 : https://academic.oup.com/mnras/article/457/4/3678/2589035
 Dors et al. 2017 : doi.org/10.1093/mnras/stw3115
 Law et al. 2021 : https://arxiv.org/abs/2011.06012
-Note : this code will automatically search for automatic bpt outputs from bpt_newer.py
 '''
-
-#should be updated to use ratio_maker
-
-import sys, os
-sys.path.append('/home/mparra/PARRA/Scripts/Python/MUSE/')
-
+import os
 from astropy.io import fits
 import matplotlib.pyplot as plt
 from mpdaf.obj import Image
 import numpy as np
 import logging
 import argparse
-from line_utils import ratio_maker, map_plot
+from configparser import ConfigParser, ExtendedInterpolation
+
+
+def plot_map(filename, outfile):
+    image = Image(filename)
+
+    img_figure, ax = plt.subplots(1, subplot_kw={'projection': image.wcs.wcs},figsize=(10,8))
+
+    img_figure.suptitle(filename)
+
+    image.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False, extent=None,
+                colorbar='v', cmap="cool", vmin=np.nanpercentile(image.data.data, 0.5),
+                vmax=np.nanpercentile(image.data.data, 99.5))
+    ax.set_xlabel('Ra', labelpad=0)
+    ax.set_ylabel('Dec', labelpad=-2)
+
+    img_figure.savefig("%s.png" % outfile)
 
 #defining the calibration functions. The arguments are ordered according to the lines wavelengths
-
 def OH_R(R2,N2,R3):
 
     OH_RU=8.589+0.022*np.log10(R3/R2)+0.399*np.log10(N2)+(-0.137+0.164*np.log10(R3/R2)+0.589*np.log10(N2))*np.log10(R2)
@@ -55,134 +64,101 @@ def OH_S_2D(N2,S2):
 
     return np.where(np.log10(N2)>=-0.6,OH_SU_2D,np.nan)
 
-ap = argparse.ArgumentParser(description='Create BPT diagram from two given line ratio maps and the BPT diagram type. Separatios based on Law et al. 2021')
+ap = argparse.ArgumentParser(description='Create metallicity map filtering out non-H2 regions (if the BPT diagram is provied)')
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='H2_diags', type=str)
-ap.add_argument("-bpt", "--bptmap", nargs='?', help="BPT OIII/SII map file path", default=None, type=str)
-ap.add_argument("-r", "--regions", nargs='*', help="Region files to be overlaid on the image")
-ap.add_argument("-c", "--contours", nargs='?', help="Fits file to use to overlay contours", type=str)
+ap.add_argument("-bpt", "--bptmap", nargs='?', help="BPT OIII/SII map file path. If not provided the data won't be filtered", default=None, type=str)
+ap.add_argument("--config", nargs='?', help="Config file with line ratio maps", type=str, required=True)
 args = ap.parse_args()
 
 outdir=args.outdir
 
-sdir='/home/agurpide/optical_data/NGC1313X-1/nancleancubes/coordadjusted/'
-os.chdir(sdir)
+if not os.path.isdir(outdir):
+    os.mkdir(outdir)
 
-'''
-First step : obtaining the BPT map of interest if it isn't provided
-'''
-if args.bptmap==None:
-    for root, dirs, files in os.walk(".", topdown=False):
-                            for name in files:
-                                if name.endswith('BPT_2.fits'):
-                                        bpt_file=os.path.join(root,name)
+# read config file
+bptcfg = ConfigParser(interpolation=ExtendedInterpolation())
+bptcfg.read("%s" %args.config)
 
-else:
-    bpt_file=args.bptmap
-
-bpt_map = fits.open(bpt_file)
-bpt_expmap=np.where(bpt_map[0].data<2, True, False)
-
-'''
-This part computes metallicity maps.
-There are three methods depending on the amount of lines available.
-Those computations are based on 4 line INTENSITY ratios.
-We search for those lines using ratio_maker.
-'''
-
-# in order : R_2, N_2, S_2, R_3
-pilyugin_lines=\
-          [[['OII3727','OII3729'],['HBETA']],
-           [['NII6548','NII6583'],['HBETA']],
-           [['SII6716','SII6731'],['HBETA']],
-           [['OIII4959','OIII5007'],['HBETA']]]
-
-pilyugin_results,pilyugin_names=ratio_maker(pilyugin_lines,'flux',outdir)
-
-#We do not loop this to keep clear variable names
-if pilyugin_results[0]=='Done':
-    ratio_R2=fits.open(pilyugin_names[0])
-    ratio_R2=ratio_R2[0].data
-
-if pilyugin_results[1]=='Done':
-    ratio_N2=fits.open(pilyugin_names[1])
-    metal_file=ratio_N2.copy()
-    ratio_N2=ratio_N2[0].data
-
-if pilyugin_results[2]=='Done':
-    ratio_S2=fits.open(pilyugin_names[2])
-    ratio_S2=ratio_S2[0].data
-
-if pilyugin_results[3]=='Done':
-    ratio_R3=fits.open(pilyugin_names[3])
-    ratio_R3=ratio_R3[0].data
-
-#Dichotomy of the possibilities :
-#too many lines are missing
-if pilyugin_results[1]=='Unavailable':
-    print('N2 ratio unavailable. Cannot compute')
-    case='RIP'
-    sys.exit()
-
-else:
-    metal_map=metal_file[0].data
-    #We got everything
-    if pilyugin_results[0]==pilyugin_results[3]=='Done':
+lineratio_paths = bptcfg["lineratio_paths"]
+# we have N2
+if bptcfg.has_option("lineratio_paths", "N_2"):
+    ratio_N2 = fits.open(lineratio_paths["N_2"])
+    metal_file = ratio_N2.copy()
+    ratio_N2 = ratio_N2[0].data
+    # we have R3
+    if bptcfg.has_option("lineratio_paths", "R_3"):
+        ratio_R3 = fits.open(lineratio_paths["R_3"])
+        ratio_R3 = ratio_R3[0].data
+        #We got everything
+        if bptcfg.has_option("lineratio_paths", "R_2"):
             print('Computing using the standard formulae')
-            case='R,3D'
+            ratio_R2 = fits.open(lineratio_paths["R_2"])
+            ratio_R2 = ratio_R2[0].data
+            case='R_3D'
             metal_map=OH_R(ratio_R2,ratio_N2,ratio_R3)
+        # we have N2 R2 and S2
+        elif bptcfg.has_option("lineratio_paths", "S_2"):
+             ratio_S2 = fits.open(lineratio_paths["S_2"])
+             ratio_S2 = ratio_S2[0].data
+             print('R2 ratio unavailable.\n'
+                   'Computing using the S2 ratio instead.\n')
+             case='S_3D'
+             metal_map = OH_S(ratio_N2,ratio_S2,ratio_R3)
+    # there is no R3 but there is S2
+    elif bptcfg.has_option("lineratio_paths", "S_2"):
+             print('Some of the ratios are unavailable.\n'
+                   'Attempting a two-dimensional computation for the higher values of the NII ratios.\n'
+                   'Using the S relation\n')
+             case='S_2D'
+             ratio_S2 = fits.open(lineratio_paths["S_2"])
+             ratio_S2 = ratio_S2[0].data
+             metal_map = OH_S_2D(ratio_N2,ratio_S2)
+# there is no N2 but there is R2 and S2
+elif bptcfg.has_option("lineratio_paths", "R_2") and bptcfg.has_option("lineratio_paths", "S_2"):
+    print('Some of the ratios are unavailable.\n'
+       'Attempting a two-dimensional computation for the higher values of the NII ratios.\n'
+       'Using the S relation\n')
+    ratio_R2 = fits.open(lineratio_paths["R_2"])
+    ratio_R2 = ratio_R2[0].data
+    ratio_S2 = fits.open(lineratio_paths["S_2"])
+    ratio_S2 = ratio_S2[0].data
+    case='R_2D'
+    metal_map = OH_R_2D(ratio_R2,ratio_S2)
+    metal_file = ratio_S2.copy()
+else:
+    raise ValueError("Too few line ratios, impossible to proceed!")
 
-    #R2 line is missing
-    if pilyugin_results[0]=='Unavailable' and pilyugin_results[2]==pilyugin_results[3]=='Done':
-            print('R2 ratio unavailable.\n'
-              'Computing using the S2 ratio instead.\n')
-            case='S,3D'
-            metal_map=OH_S(ratio_N2,ratio_S2,ratio_R3)
-
-    #two lines are missing (2 cases)
-    if pilyugin_results[2]==pilyugin_results[3]=='Unavailable':
-        print('Some of the ratios are unavailable.\n'
-              'Attempting a two-dimensional computation for the higher values of the NII ratios.\n'
-              'Using the R relation\n')
-        case='R,2D'
-        metal_map=OH_R_2D(ratio_R2,ratio_S2)
-
-    if pilyugin_results[0]==pilyugin_results[3]=='Unavailable':
-        print('Some of the ratios are unavailable.\n'
-              'Attempting a two-dimensional computation for the higher values of the NII ratios.\n'
-              'Using the S relation\n')
-        case='S,2D'
-        metal_map=OH_S_2D(ratio_N2,ratio_S2)
-
-print("Metallicity computed using the %s method" %case)
-
+print("Metallicity computed using the %s method" % case)
 
 #computing the results depending of the case
 
-os.chdir(outdir)
 
-if bpt_map[0].data.shape!=metal_map.shape:
-    logging.warning("Can't compare the bpt map and the metal map : Their shapes are different.\n"
-          "Using the entire metal map as a result. Be careful.")
+if args.bptmap is not None:
+    bpt_file = args.bptmap
+    print("Excluding regions =>1 based on BPT diagram 2 (%s)" % bpt_file)
+    bpt_map = fits.open(bpt_file)
+    if bpt_map[0].data.shape!=metal_map.shape:
+        logging.warning("Can't compare the bpt map and the metal map : Their shapes are different.\n"
+              "Using the entire metal map as a result. Be careful.")
+    metal_map[bpt_map[0].data>1] = np.nan
+    #metal_file[0].data[bpt_map[0].data<1] = np.nan
 
-metal_map[~bpt_expmap] = np.nan
+metal_file[0].data = metal_map
 
-metal_file[0].data=metal_map
+metal_file[0].header['COMMENT'] = "Metal map computed with method %s" % case
 
-metal_file.writeto('metal_map.fits',overwrite=True)
+outfile = "%s/metal_map_%s" % (outdir, case)
 
-metal_title='metal map computed with method '+ case
+metal_file.writeto("%s.fits" % outfile, overwrite=True)
 
-map_plot('metal_map.fits',title=metal_title,contours=args.contours,regions=args.regions)
-
+plot_map('%s.fits' % outfile, outfile=outfile)
 
 '''
 This part computes ionization parameter map.
 '''
-
 #defining the calibration function. Here, Z is the metallicity normalized to solar metallicity
 
 #there are significant uncertainties here, be careful
-
 Z_star=8.69
 
 def U_ion(Z,S2):
@@ -190,18 +166,16 @@ def U_ion(Z,S2):
     b_ion=-3.69*Z**2+5.11*Z-5.26
     return a_ion*S2+b_ion
 
-ion_par_file=metal_file.copy()
+ion_par_file = metal_file.copy()
 
-ion_par_map=ion_par_file[0].data
+ion_par_file[0].data =U_ion(metal_map/Z_star,np.log10(ratio_S2))
 
-ion_par_map=U_ion(metal_map/Z_star,np.log10(ratio_S2))
+ion_par_file[0].header['COMMENT'] = "Metal map computed with method %s" % case
 
-ion_par_file[0].data=ion_par_map
+outfile = "%s/ion_map_%s" % (outdir, case)
 
-ion_par_file.writeto('ion_par.fits',overwrite=True)
+ion_par_file.writeto('%s.fits' % outfile, overwrite=True)
 
-ion_title='ionization map computed with method' +case
+plot_map('%s.fits' % outfile, outfile="%s" % outfile)
 
-map_plot('ion_par.fits',title=ion_title,contours=args.contours,regions=args.regions)
-
-print("Results stored to %s" %outdir)
+print("Results stored to %s" % outdir)
