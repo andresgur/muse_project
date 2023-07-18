@@ -53,9 +53,10 @@ read_mappingsV.py --> Script to obtain predicted line ratios from the mapping V 
 
 -------BPT-------
 bpt_colored.py -> Classifies each pixel based on the IFU-improved BPT diagrams from Law+2021. Outputs fits and pngs of BPT diagrams, colored for better visualization
+
 python bpt_colored.py --config config_file (see an example in config_files)
 
-![](images/grid_bpts.png)  |  ![Radial profile](images/grid_img_bpt.png)
+![](images/grid_bpts.png)  |  ![](images/grid_img_bpt.png)
 
 # Acknowledging
 
