@@ -2,7 +2,7 @@
 # @Date:   03-09-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 26-04-2021
+# @Last modified time: 03-08-2021
 # Script to create line map ratios out of two line map images fits file
 
 # imports
@@ -23,17 +23,21 @@ def add_maps(linemaps):
         List of strings of maps to be added
 
     """
-    added_maps_log = ' '.join(linemaps_numerator)
+    added_maps_log = ' '.join(linemaps)
     added_data = []
     # add line maps
     logging.info('Adding %s maps together for numerator' % added_maps_log)
     for linemap in linemaps:
         if os.path.isfile(linemap):
             linemapfits = fits.open(linemap)
-            if len(added_data) == 0:
-                added_data = linemapfits[0].data
+            if linemapfits[0].data is not None:
+                extension = 0
             else:
-                added_data += linemapfits[0].data
+                extension = 1
+            if len(added_data) == 0:
+                added_data = linemapfits[extension].data
+            else:
+                added_data += linemapfits[extension].data
         else:
             logging.warning("Line map %s not found." % linemap)
             continue
