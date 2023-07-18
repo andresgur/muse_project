@@ -29,8 +29,6 @@ Before             |  After
 :-------------------------:|:-------------------------:
 ![Sectors profile](images/image_reg.png)  |  ![Radial profile](images/image_reg_cut.png)
 
-
-
 image_stats.py --> Retrieve statistical information (min, max, mean) of a region or entire image by default
 image_stats.py image.fits -region ds9reigonfile.reg
 
@@ -57,7 +55,7 @@ read_mappingsV.py --> Script to obtain predicted line ratios from the mapping V 
 bpt_colored.py -> Classifies each pixel based on the IFU-improved BPT diagrams from Law+2021. Outputs fits and pngs of BPT diagrams, colored for better visualization
 python bpt_colored.py --config config_file (see an example in config_files)
 
-
+![](images/grid_bpts.png)  |  ![Radial profile](images/grid_img_bpt.png)
 
 # Acknowledging
 
