@@ -10,7 +10,7 @@ import argparse
 import os
 import sys
 import numpy as np
-import logging
+import warnings
 from astropy.io import fits
 
 def var_division(a, b, a_err, b_err):
@@ -37,7 +37,7 @@ def add_maps_quadrature(linemaps):
     added_maps_log = ' '.join(linemaps)
     added_data = []
     # add line maps
-    logging.info('Adding %s maps together for numerator' % added_maps_log)
+    print('Adding %s maps together for numerator' % added_maps_log)
     for linemap in linemaps:
         if os.path.isfile(linemap):
             linemapfits = fits.open(linemap)
@@ -50,7 +50,7 @@ def add_maps_quadrature(linemaps):
             else:
                 added_data += linemapfits[extension].data**2
         else:
-            logging.warning("Line map %s not found." % linemap)
+            warnings.warn("Line map %s not found." % linemap)
             continue
 
     return np.sqrt(added_data), added_maps_log
@@ -68,7 +68,7 @@ def add_maps(linemaps):
     added_maps_log = ' '.join(linemaps)
     added_data = []
     # add line maps
-    logging.info('Adding %s maps together for numerator' % added_maps_log)
+    print('Adding %s maps together for numerator' % added_maps_log)
     for linemap in linemaps:
         if os.path.isfile(linemap):
             linemapfits = fits.open(linemap)
@@ -81,7 +81,7 @@ def add_maps(linemaps):
             else:
                 added_data += linemapfits[extension].data
         else:
-            logging.warning("Line map %s not found." % linemap)
+            warnings.warn("Line map %s not found." % linemap)
             continue
 
     return added_data, added_maps_log
@@ -121,7 +121,14 @@ if not os.path.isdir(outdir):
 
 
 numerator_data, added_maps_numerator = add_maps(linemaps_numerator)
+
+if not numerator_data: # list is empty maps were not found
+    raise ValueError("Numerator map %s not found!" % added_maps_numerator)
+
 denominator_data, added_maps_denominator = add_maps(linemaps_denominator)
+
+if not denominator_data: # list is empty maps were not found
+    raise ValueError("Numerator map %s not found!" % added_maps_numerator)
 
 # get the header from one of the files (or the next one in case it doesn't exist)
 if os.path.isfile(linemaps_denominator[0]):
