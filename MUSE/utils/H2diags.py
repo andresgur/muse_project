@@ -84,22 +84,22 @@ lineratio_paths = bptcfg["lineratio_paths"]
 if bptcfg.has_option("lineratio_paths", "N_2"):
     ratio_N2 = fits.open(lineratio_paths["N_2"])
     metal_file = ratio_N2.copy()
-    ratio_N2 = ratio_N2[0].data
+    ratio_N2 = ratio_N2[1].data
     # we have R3
     if bptcfg.has_option("lineratio_paths", "R_3"):
         ratio_R3 = fits.open(lineratio_paths["R_3"])
-        ratio_R3 = ratio_R3[0].data
+        ratio_R3 = ratio_R3[1].data
         #We got everything
         if bptcfg.has_option("lineratio_paths", "R_2"):
             print('Computing using the standard formulae')
             ratio_R2 = fits.open(lineratio_paths["R_2"])
-            ratio_R2 = ratio_R2[0].data
+            ratio_R2 = ratio_R2[1].data
             case='R_3D'
             metal_map=OH_R(ratio_R2,ratio_N2,ratio_R3)
         # we have N2 R2 and S2
         elif bptcfg.has_option("lineratio_paths", "S_2"):
              ratio_S2 = fits.open(lineratio_paths["S_2"])
-             ratio_S2 = ratio_S2[0].data
+             ratio_S2 = ratio_S2[1].data
              print('R2 ratio unavailable.\n'
                    'Computing using the S2 ratio instead.\n')
              case='S_3D'
@@ -142,6 +142,8 @@ if args.bptmap is not None:
               "Using the entire metal map as a result. Be careful.")
     metal_map[bpt_map[0].data>1] = np.nan
     #metal_file[0].data[bpt_map[0].data<1] = np.nan
+else:
+    print("Using all regions")
 
 metal_file[0].data = metal_map
 
