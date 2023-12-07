@@ -17,7 +17,7 @@ astro_corr.py --> Script to refine the astrometry of several HST images (more th
 
 deredden.py --> Script to deredden flux line maps, it needs as input the balmer decrement map (Halpha/Hbeta) and it will automatically localize the flux maps
 
-deredden_momcheva.py --> Script to deredden flux line maps based on appendix of http://arxiv.org/abs/1207.5479, it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them (python deredden_momcheva.py -a halpha_path -b hbeta_path -Rv 4.05 -i 2.86). It creates a map of E(B-V) and one with the uncertainty on E(B-V)
+deredden_momcheva.py --> Script to deredden flux line maps (based on e.g. [1](http://arxiv.org/abs/1207.5479) see the Appendix), it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them (python deredden_momcheva.py -a halpha_path -b hbeta_path -Rv 4.05 -i 2.86). It creates a map of E(B-V) and one with the uncertainty on E(B-V)
 
 ----utils----
 
@@ -46,7 +46,9 @@ python adjust_coordinates.py cube.fits --hst <ref image, typically HST>
 
 H2diags.py --> Computes metallicity maps based on Pilyugin, L. S., & Grebel, E. K. 2016, MNRAS, 457, 3678. 
 A config file is needed and optionally a BPT file to exclude non-H2 regions (currently defined as having an index >1). Otherwise the whole map is used
-python H2diags.py --config metal_config.py -bpt lineratios/bpt_diagrams_v2/BPT_2.fits or simply python H2diags.py --config metal_config.py  
+python H2diags.py --config metal_config.py -bpt lineratios/bpt_diagrams_v2/BPT_2.fits or simply python H2diags.py --config metal_config.py 
+
+
 cleanskyres.py --> Uses [ZAP](https://academic.oup.com/mnras/article/458/3/3210/2589286) to remove sky features. Make sure to mask your sources before hand! (with the -r option you can pass a ds9 with several regions to be masked, ideally you wan to mask bright and extended sources)
 
 ----MAPPINGS-----
