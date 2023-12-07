@@ -47,7 +47,7 @@ python adjust_coordinates.py cube.fits --hst <ref image, typically HST>
 H2diags.py --> Computes metallicity maps based on Pilyugin, L. S., & Grebel, E. K. 2016, MNRAS, 457, 3678. 
 A config file is needed and optionally a BPT file to exclude non-H2 regions (currently defined as having an index >1). Otherwise the whole map is used
 python H2diags.py --config metal_config.py -bpt lineratios/bpt_diagrams_v2/BPT_2.fits or simply python H2diags.py --config metal_config.py  
-
+cleanskyres.py --> Uses [ZAP](https://academic.oup.com/mnras/article/458/3/3210/2589286) to remove sky features. Make sure to mask your sources before hand! (with the -r option you can pass a ds9 with several regions to be masked, ideally you wan to mask bright and extended sources)
 
 ----MAPPINGS-----
 
