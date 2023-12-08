@@ -1,16 +1,9 @@
 # @Author: Andrés Gúrpide <agurpide>
 # @Date:   07-07-2019
 # @Email:  agurpidelash@irap.omp.eu
-# @Last modified by:   agurpide
-# @Last modified time: 11-03-2022
-
-
-
-# -*- coding: utf-8 -*
-# Script to clean a cube from sky residuqls
 # Author: Andres Gurpide Lasheras  andres.gurpide@gmail.com
-# 12-04-2019
-# !/usr/bin/env python3
+# @Last modified by:   agurpide
+# @Last modified time: 11-03-2023
 
 # imports
 import numpy as np
@@ -21,7 +14,8 @@ import os
 import logging
 import muse_utils as mu
 import multiprocessing
-
+from astropy.io import fits
+import matplotlib.pyplot as plt
 
 def create_mask_region(image, percentile):
     """Create mask region from white light image and percentile flux threshold.
@@ -125,16 +119,27 @@ logger.debug("Name for the cleaned cube: %s" % output_cube)
 
 # cfwidthSVD default is 300 for eigenvector calculation; good; SP continuum filter ~ 20 - 50 pixels
 
+cfwidthSP = 30
+
 if args.eigenvalues==-1:
     zap.process(input_cube, skycubefits=out_skycube, mask=out_mask_file,
-                outcubefits=output_cube, cfwidthSVD=300, cfwidthSP=300,
+                outcubefits=output_cube, cfwidthSVD=300, cfwidthSP=cfwidthSP,
                 varcurvefits=out_varcurve, overwrite=True, clean=nanclean, ncpu=cores)
 else:
     logger.info("Using %d eigenvalues" % args.eigenvalues)
     zap.process(input_cube, skycubefits=out_skycube, mask=out_mask_file,
-                outcubefits=output_cube, cfwidthSVD=300, cfwidthSP=300,
+                outcubefits=output_cube, cfwidthSVD=300, cfwidthSP=cfwidthSP,
                 varcurvefits=out_varcurve, overwrite=True, clean=nanclean, ncpu=cores, nevals=[args.eigenvalues])
 
+curvevar = fits.open(out_varcurve)
+
+plt.figure()
+plt.plot(range(len(curvevar[1].data)), curvevar[1].data["col0"])
+plt.axvline(curvevar[1].header["ZAPNEV0"], label=curvevar[1].header["ZAPNEV0"],
+            ls="--", color="black")
+plt.ylabel("Variance")
+plt.xlabel("Eigenvalues")
+plt.savefig("%s/curvevar.png" %args.outdir, dpi=100)
 '''
 process.writecube(outcubefits='cube.fits', overwrite=True)
 process.writeskycube(skycubefits='skycube.fits', overwrite=True)
