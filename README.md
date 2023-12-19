@@ -1,6 +1,6 @@
 # muse_project
 
-These scripts were developed for [Gúrpide et al. 2022](https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract) and have been regularly updated since then. They allow to extract useful information mainly from MUSE datacubes and images but there's also some functionality to extract fluxes from hst images and chandra PSF profiles
+These scripts were developed for [Gúrpide et al. 2022](https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract) and have been regularly updated since then. They allow to extract useful information mainly from MUSE datacubes and images but there's also some functionality to extract fluxes from hst images and chandra PSF profiles. Scripts can be run from the command line. Run `python <script> -h ` to check the input variables and a small description of the script.
 
 ## CHANDRA
 marxsim_script.py --> Script to be run from the command line to simulate N PSFs based on a given chandra observation. Ciao and marx need to be properly setup before running the script. Use python marxsim_script.py -h to obtain the available command line arguments
@@ -47,6 +47,8 @@ python adjust_coordinates.py cube.fits --hst <ref image, typically HST>
 H2diags.py --> Computes metallicity maps based on Pilyugin, L. S., & Grebel, E. K. 2016, MNRAS, 457, 3678. 
 A config file is needed and optionally a BPT file to exclude non-H2 regions (currently defined as having an index >1). Otherwise the whole map is used
 python H2diags.py --config metal_config.py -bpt lineratios/bpt_diagrams_v2/BPT_2.fits or simply python H2diags.py --config metal_config.py 
+
+extract_spectrum.py --> Extracts a spectrum from a ds9 region file.
 
 
 cleanskyres.py --> Uses [ZAP](https://academic.oup.com/mnras/article/458/3/3210/2589286) to remove sky features. Make sure to mask your sources before hand! (with the -r option you can pass a ds9 with several regions to be masked, ideally you wan to mask bright and extended sources)
