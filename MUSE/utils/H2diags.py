@@ -27,13 +27,17 @@ def plot_map(filename, outfile):
 
     img_figure, ax = plt.subplots(1, subplot_kw={'projection': image.wcs.wcs},figsize=(10,8))
 
-    img_figure.suptitle(filename)
+    img_figure.suptitle(filename, fontsize=20, y=0.93)
 
     image.plot(ax=ax, scale='linear', show_xlabel=False, show_ylabel=False, extent=None,
                 colorbar='v', cmap="cool", vmin=np.nanpercentile(image.data.data, 0.5),
                 vmax=np.nanpercentile(image.data.data, 99.5))
-    ax.set_xlabel('Ra', labelpad=0)
-    ax.set_ylabel('Dec', labelpad=-2)
+    ax.set_xlabel('Ra', labelpad=0.5, fontsize=20)
+    ax.set_ylabel('Dec', labelpad=-1, fontsize=20)
+    ax.tick_params(axis='both', which='major', labelsize=18)
+    cbar = ax.images[-1].colorbar
+    cbar.ax.tick_params(labelsize=15)
+    cbar.ax.set_ylabel('12 + log(O/H)', fontsize=18, labelpad=6)
 
     img_figure.savefig("%s.png" % outfile)
 
