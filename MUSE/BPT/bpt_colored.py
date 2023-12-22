@@ -385,8 +385,8 @@ for i, ratiomap in enumerate(lineratiomaps):
         if region.size == 0:
             continue
         cmap = mpl.cm.get_cmap(map)
-        norm = mpl.colors.Normalize(vmin=np.nanmin(region.data) - 0.2,
-                                             vmax=np.nanpercentile(region.data, 99))
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region.compressed()) - 0.2,
+                                              vmax=np.nanpercentile(region.compressed(), 99))
         ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
         grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
 
