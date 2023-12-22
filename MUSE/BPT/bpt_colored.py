@@ -14,6 +14,8 @@ and manually specify the starting line ratio files instead of doing an automatic
 # imports
 import sys
 import os
+sys.path.append('/home/etudiant/Documents/GitHub/muse_project/MUSE/utils')
+sys.path.append('/home/etudiant/Documents/GitHub/muse_project/MUSE/BPT')
 import argparse
 import numpy as np
 from astropy.io import fits
@@ -195,7 +197,8 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         cmap = mpl.cm.get_cmap(map)
         # apply offset to the minimum avoid very light colors
         norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region], 0) - 0.2,
-                                     vmax=np.nanpercentile(bpt_data[region], 99))
+                                      vmax=np.nanpercentile(bpt_data[region], 99))
+
         ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
             grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
@@ -380,13 +383,19 @@ for i, ratiomap in enumerate(lineratiomaps):
 
     img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
     for index, map in enumerate(colormap):
+        
+        region_values = bpt_img.data.data[np.where(bpt_indexes==index)]
+        
+        if region_values.size == 0:
+            continue
+        
+        cmap = mpl.cm.get_cmap(map)
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region_values) - 0.2,
+                                              vmax=np.nanpercentile(region_values, 99))
+
         mask = ((bpt_indexes != index) | (np.isnan(bpt_indexes)))
         region = np.ma.masked_array(bpt_img.data, mask)
-        if region.size == 0:
-            continue
-        cmap = mpl.cm.get_cmap(map)
-        norm = mpl.colors.Normalize(vmin=np.nanmin(region.data) - 0.2,
-                                             vmax=np.nanpercentile(region.data, 99))
+        
         ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
         grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
 
