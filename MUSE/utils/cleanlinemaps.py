@@ -38,12 +38,12 @@ def clean_images(images, snrmap, outdir="cleaned_images", smooth=False, sigma=1,
             if smooth:
                 hdul[extension].data = gaussian_filter(hdul[extension].data, sigma=sigma, **kargs)
 
-            if "vel" in image or 'z' in image:
-                hdul[extension].data[np.where(np.isnan(snr_map[extension].data))] = np.nan
-
-            else:
-                hdul[extension].data[np.where(hdul[extension].data == 0)] = np.nan
-                hdul[extension].data[np.where(snr_map[snr_extension].data < sthreshold)] = np.nan
+            #if "vel" in image or 'z' in image:
+            #    hdul[extension].data[np.isnan(snr_map[extension].data)] = np.nan
+            #else:
+                #hdul[extension].data[hdul[extension].data == 0] = np.nan
+            snr_values = snr_map[snr_extension].data
+            hdul[extension].data[np.logical_or(snr_values < sthreshold, np.isnan(snr_values))] = np.nan
             # write keywords
             hdul[extension].header.set("SNR", "%.2f" % sthreshold, 'SNR threshold to filter the map')
             hdul[extension].header.set("SNR_file", "%s" % snrmap.filename, 'SNR file used to filter the map')
@@ -68,7 +68,7 @@ ap.add_argument("-l", "--line", nargs='?', help='Line to clean maps', type=str)
 ap.add_argument("-i", "--image", nargs='*', help='Images to clean', type=str)
 ap.add_argument("--smooth", help='Whether to smooth the images prior to thresholding them', action='store_true')
 ap.add_argument("-o", "--outdir", nargs='?', help="Output dir", default='cleaned_images')
-ap.add_argument("-t", "--threshold", nargs='?', help="Threshold signal to noise ratio to clean the input images", default=5, type=float)
+ap.add_argument("-t", "--threshold", nargs='?', help="Threshold signal to noise ratio to clean the input images. Default 5", default=5, type=float)
 ap.add_argument("-s", "--signaltonoiseratiomap", nargs='?', help="Signal to noise ratio map to clean the input images", default="")
 args = ap.parse_args()
 
@@ -88,7 +88,7 @@ if file_map != "" and os.path.isfile(file_map):
     snr_map = fits.open(file_map)
 
 elif rootname != "":
-    file_map = glob.glob('./%s*snr*%s.fits' % (rootname, line))
+    file_map = glob.glob('./%s*_snr_*%s.fits' % (rootname, line))
     if len(file_map) == 0:
         print("SNR map with rootname %s for line %s not found!" % (rootname, line))
         sys.exit()
