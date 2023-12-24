@@ -142,9 +142,8 @@ if args.bptmap is not None:
     print("Excluding regions =>1 based on BPT diagram 2 (%s)" % bpt_file)
     bpt_map = fits.open(bpt_file)
     if bpt_map[0].data.shape!=metal_map.shape:
-        logging.warning("Can't compare the bpt map and the metal map : Their shapes are different.\n"
-              "Using the entire metal map as a result. Be careful.")
-    metal_map[bpt_map[0].data>1] = np.nan
+        raise ValueError("Can't compare the bpt map and the metal map : Their shapes are different.")
+    metal_map[bpt_map[0].data>0] = np.nan
     #metal_file[0].data[bpt_map[0].data<1] = np.nan
 else:
     print("Using all regions")
