@@ -20,3 +20,9 @@ diagram = law
 [z_values]
 # path for a 2D fits file to give intensity to the individual points in the BPT, it can be set to None and it will be ignored
 z_values = ${Paths:ulx_dir}/camel_1_n2ha/cleaned_images/cleancamel_1_n2ha_ssmooth_wavedisp_indep_HALPHAcorrected_wcsupdated.fits
+
+[ULX_position]
+# arcsec
+ra: 146.44951247012602
+dec: -14.36714729629245
+err: 0.4147308218628722

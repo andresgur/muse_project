@@ -22,6 +22,7 @@ import matplotlib as mpl
 from mpdaf.obj import Image
 import muse_utils as mu
 from matplotlib.colors import ListedColormap
+from matplotlib.patches import Circle
 from line_utils import ratio_maker
 from astropy.wcs import WCS
 from configparser import ConfigParser, ExtendedInterpolation
@@ -367,6 +368,19 @@ grid_axes[0].set_ylabel("log([OIII]/H$_\\beta$)")
 
 grid_im_axes[0].set_ylabel('Dec', labelpad=-2)
 
+if bptcfg.has_section("ULX_position"):
+    ra=float(bptcfg["ULX_position"]["ra"])
+    dec=float(bptcfg["ULX_position"]["dec"])
+    err=float(bptcfg["ULX_position"]["err"])/3600
+    circle=(ra, dec, err)
+    
+    for i in range(len(grid_im_axes)):
+        c = Circle(circle[:2],circle[2], 
+                    edgecolor='lime',
+                    transform=grid_im_axes[i].get_transform('fk5'),
+                    facecolor='none', lw=5)
+        grid_im_axes[i].add_patch(c)
+
 for myax in grid_im_axes[1:]:
     myax.coords[1].set_auto_axislabel(False)
     myax.coords[1].set_ticklabel_visible(False)
@@ -379,6 +393,14 @@ for i, ratiomap in enumerate(lineratiomaps):
     bpt_img = Image(outfile)
 
     img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
+    
+    if bptcfg.has_section("ULX_position"):
+        c = Circle(circle[:2],circle[2], 
+                    edgecolor='lime',
+                    transform=ax.get_transform('fk5'),
+                    facecolor='none', lw=1.5)
+        ax.add_patch(c)
+    
     for index, map in enumerate(colormap):
         mask = ((bpt_indexes != index) | (np.isnan(bpt_indexes)))
         region = np.ma.masked_array(bpt_img.data, mask)

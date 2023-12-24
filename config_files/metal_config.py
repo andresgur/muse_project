@@ -11,3 +11,9 @@ base_dir:${ulx_dir}/lineratios
 N_2: ${base_dir}/NII_HBETA_ratio.fits
 S_2: ${base_dir}/SII_HBETA_ratio.fits
 R_3: ${base_dir}/OIII_HBETA_ratio.fits
+
+[ULX_position]
+# arcsec
+ra: 146.44951247012602
+dec: -14.36714729629245
+err: 0.4147308218628722

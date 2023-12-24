@@ -20,12 +20,25 @@ import numpy as np
 import logging
 import argparse
 from configparser import ConfigParser, ExtendedInterpolation
+from matplotlib.patches import Circle
 
 
 def plot_map(filename, outfile):
     image = Image(filename)
 
     img_figure, ax = plt.subplots(1, subplot_kw={'projection': image.wcs.wcs},figsize=(10,8))
+    
+    if bptcfg.has_section("ULX_position"):
+        ra=float(bptcfg["ULX_position"]["ra"])
+        dec=float(bptcfg["ULX_position"]["dec"])
+        err=float(bptcfg["ULX_position"]["err"])/3600
+        circle=(ra, dec, err)
+        
+        c = Circle(circle[:2],circle[2], 
+                    edgecolor='lime',
+                    transform=ax.get_transform('fk5'),
+                    facecolor='none', lw=3)
+        ax.add_patch(c)
 
     img_figure.suptitle(filename, fontsize=20, y=0.93)
 
