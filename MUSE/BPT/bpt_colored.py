@@ -189,17 +189,22 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         grid_ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
     regions = [starform_regions, int_regions, agn_regions, liner_regions]
     # ploting the regions
-    for map, region in zip(colormap, regions):
-        if bpt_data[region].size == 0:
+    for map, region_index in zip(colormap, regions):
+        # masking the nan and infinite values
+        mask = ((np.isnan(bpt_data[region_index])) | (np.isinf(bpt_data[region_index])))
+        region = np.ma.masked_array(bpt_data[region_index], mask)
+        # getting a list of only unmasked values
+        region_c = region.compressed()
+        if region_c.size == 0:
             # no values for this region
             continue
         cmap = mpl.cm.get_cmap(map)
         # apply offset to the minimum avoid very light colors
-        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region], 0) - 0.2,
-                                     vmax=np.nanpercentile(bpt_data[region], 99))
-        ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
+                                     vmax=np.nanpercentile(region_c, 99))
+        ax.scatter(logx[region_index], logy[region_index], c=region, cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
-            grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
+            grid_ax.scatter(logx[region_index], logy[region_index], c=region, cmap=cmap, norm=norm, ls="None", marker=".")
     ax.legend()
 
     # save fits files
@@ -302,16 +307,22 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
         grid_ax.plot(bpt_diagram.warm_projecrv(logy_arr),logy_arr,color="black",zorder=1000)
 
     # ploting the regions
-    for map, region in zip(colormap, regions):
-        if bpt_data[region].size == 0:
+    for map, region_index in zip(colormap, regions):
+        # masking the nan and infinite values
+        mask = ((np.isnan(bpt_data[region_index])) | (np.isinf(bpt_data[region_index])))
+        region = np.ma.masked_array(bpt_data[region_index], mask)
+        # getting a list of only unmasked values
+        region_c = region.compressed()
+        if region_c.size == 0:
+            # no values for this region
             continue
         cmap = mpl.cm.get_cmap(map)
-        # apply offset to avoid very white regions
-        norm = mpl.colors.Normalize(vmin=np.nanmin(bpt_data[region], 0) - 0.2,
-                                             vmax=np.nanpercentile(bpt_data[region], 99))
-        ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
+        # apply offset to the minimum avoid very light colors
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
+                                     vmax=np.nanpercentile(region_c, 99))
+        ax.scatter(logx[region_index], logy[region_index], c=region, cmap=cmap, norm=norm, ls="None", marker=".")
         if grid_ax is not None:
-            grid_ax.scatter(logx[region], logy[region], c=bpt_data[region], cmap=cmap, norm=norm, ls="None", marker=".")
+            grid_ax.scatter(logx[region_index], logy[region_index], c=region, cmap=cmap, norm=norm, ls="None", marker=".")
     ax.legend()
 
     bpt_fits = fits.PrimaryHDU(data=bpt_data, header=N2_map[0].header)
@@ -354,6 +365,7 @@ bptcfg.read("%s" %args.config[0])
 bpt_type = bptcfg["bpt"]["diagram"]
 lineratio_paths = bptcfg["Paths"]
 lineratiomaps = [lineratio_paths["n2_ha"], lineratio_paths["s2_ha"], lineratio_paths["oI_ha"]]
+
 
 '''STANDARD DIAGRAMS'''
 
@@ -404,13 +416,20 @@ for i, ratiomap in enumerate(lineratiomaps):
     for index, map in enumerate(colormap):
         mask = ((bpt_indexes != index) | (np.isnan(bpt_indexes)))
         region = np.ma.masked_array(bpt_img.data, mask)
-        if region.size == 0:
+        mask_inf = ((np.isnan(region)) | (np.isinf(region)))
+        region = np.ma.masked_array(region, mask_inf)
+        # getting a list of only unmasked values
+        region_c = region.compressed()
+        if region_c.size == 0:
+            # no values for this region
             continue
         cmap = mpl.cm.get_cmap(map)
-        norm = mpl.colors.Normalize(vmin=np.nanmin(region.compressed()) - 0.2,
-                                              vmax=np.nanpercentile(region.compressed(), 99))
+        # apply offset to the minimum avoid very light colors
+        norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
+                                              vmax=np.nanpercentile(region_c, 99))
         ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
         grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
+
 
     grid_im_axes[i].set_xlabel('Ra', labelpad=1)
     ax.set_xlabel('Ra', labelpad=1)
@@ -434,7 +453,7 @@ for i, ratiomap in enumerate(lineratiomaps):
     img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4, dpi=200)
     print("Results stored to %s" % outfile)
 grid_figure.savefig("%s/grid_bpts.png" % outdir)
-grid_img_figure.savefig("%s/grid_img_bpt.pdf" % outdir, bbox_inches="tight", pad_inches=0.4, dpi=200)
+grid_img_figure.savefig("%s/grid_img_bpt.png" % outdir, bbox_inches="tight", pad_inches=0.4, dpi=200)
 
 '''PROJECTION DIAGRAM'''
 if False:
