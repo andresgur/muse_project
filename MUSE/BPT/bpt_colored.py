@@ -162,9 +162,8 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
     liner_regions = np.where(((logy > pure_starform) | (logx > bpt_diagram.limit)) & (logy < agnliner_curve) & ((logx > int_curve) | (logy > bpt_diagram.int_inter[1])))
     bpt_data[liner_regions] = logx[liner_regions] + logy[liner_regions]
     bpt_indexes[liner_regions] = 3
-
-
-    starform_regions = np.where(logy < pure_starform)
+    # the star forming region diverges beyond limit, so we need to add this other condition
+    starform_regions = np.where((logy < pure_starform) & (logx < bpt_diagram.limit))
     bpt_data[starform_regions] = logx[starform_regions] + logy[starform_regions]
     bpt_indexes[starform_regions] = 0
     # plot the separations
