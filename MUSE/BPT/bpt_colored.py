@@ -154,8 +154,10 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
     int_regions = np.where(((logy > pure_starform) & (logx <= int_curve)) | (logx > bpt_diagram.limit))
     bpt_data[int_regions] = logx[int_regions] + logy[int_regions]
     bpt_indexes[int_regions] = 1
-    # careful the int line does not work above a given limit
-    agn_regions = np.where(((logx > int_curve) | (logy > bpt_diagram.int_inter[1])) & (logy > agnliner_curve))
+    # For logy < bpt_diagram.int_inter[1]), we check that we are above the intermediate-agn curve.
+    # Elsewhere, this curve doesn't exist, so we check that we are above the starform curve.
+    # In both cases, we check that we are above the LINER curve.
+    agn_regions = np.where((((logx > int_curve) & (logy < bpt_diagram.int_inter[1])) | ((logy > pure_starform) & (logy > bpt_diagram.int_inter[1]))) & (logy > agnliner_curve))
     bpt_data[agn_regions] = logx[agn_regions] + logy[agn_regions]
     bpt_indexes[agn_regions] = 2
     # careful the int line does not work above a given limit
@@ -426,8 +428,8 @@ for i, ratiomap in enumerate(lineratiomaps):
         # apply offset to the minimum avoid very light colors
         norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
                                               vmax=np.nanpercentile(region_c, 99))
-        ax.imshow(region, cmap=cmap, norm=norm, origin="lower")
-        grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower")
+        ax.imshow(region, cmap=cmap, norm=norm, origin="lower", interpolation="nearest")
+        grid_im_axes[i].imshow(region, cmap=cmap, norm=norm, origin="lower", interpolation="nearest")
 
 
     grid_im_axes[i].set_xlabel('Ra', labelpad=1)
