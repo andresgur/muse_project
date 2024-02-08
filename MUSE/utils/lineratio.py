@@ -13,6 +13,7 @@ import numpy as np
 import warnings
 from astropy.io import fits
 
+
 def var_division(a, b, a_err, b_err):
     """Compute the variance on the division of two values or arrays (a/b)
     ----------
@@ -86,6 +87,7 @@ def add_maps(linemaps):
 
     return added_data, added_maps_log
 
+keywords = ["CRVAL3", "CRPIX3", "CD3_3", "CD3_1", "CD3_2", "CD1_3", "CD2_3", "CTYPE3", "CUNIT3"]
 # read arguments
 ap = argparse.ArgumentParser(description='Computes the line ratio between two maps. If associated error maps are given, it also propagates the uncertainties into the final image (variance stored as EXTENSION = STAT)')
 ap.add_argument("-n", "--numerators", nargs='+', help="Line maps to be added in the numerator of the line ratio",
@@ -128,7 +130,7 @@ if not len(numerator_data): # list is empty maps were not found
 denominator_data, added_maps_denominator = add_maps(linemaps_denominator)
 
 if not len(denominator_data): # list is empty maps were not found
-    raise ValueError("Numerator map %s not found!" % added_maps_numerator)
+    raise ValueError("Denominator map %s not found!" % added_maps_denominator)
 
 # get the header from one of the files (or the next one in case it doesn't exist)
 if os.path.isfile(linemaps_denominator[0]):
@@ -141,9 +143,6 @@ ratio_fits = fits.HDUList(fits.PrimaryHDU(header=header))
 ratio_fits[0].header["EXTNAME"] = 'DATA'
 ratio_fits[0].header["ERRDATA"] = 'STAT'
 
-keywords = ["CRVAL3", "CRPIX3", "CD3_3", "CD3_1", "CD3_2", "CD1_3", "CD2_3", "CTYPE3", "CUNIT3"]
-
-#del ratio_fits[0].header[4:33]
 ratio_fits.append(fits.ImageHDU(data=numerator_data / denominator_data, header=header,
                          name="DATA"))
 ratio_fits[1].header['COMMENT'] = "Ratio of %s/%s line maps" % (added_maps_numerator, added_maps_denominator)
@@ -161,8 +160,6 @@ for hdu in ratio_fits:
     for key in keywords:
         if key in hdu.header:
             del hdu.header[key]
-
-
 
 ratio_fits.writeto(outdir + "/" + outname + ".fits", overwrite=True)
 print('Line ratio %s/%s written to %s/%s.fits' % (added_maps_numerator, added_maps_denominator, outdir, outname))
