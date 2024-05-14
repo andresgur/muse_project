@@ -2,7 +2,7 @@
 # @Date:   02-09-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 08-08-2021
+# @Last modified time: 28-03-2022
 # Script to extract a spectrum from a certain region around a center of the cube. Background subtraction is also possible taking into acocunt the scaling of the areas
 
 # imports
@@ -16,7 +16,7 @@ import muse_utils as mu
 import logging
 import mpdaf.MUSE.PSF as psf
 import numpy as np
-from regions import read_ds9, DS9RegionParserError
+from regions import Regions
 
 
 def extract_spectrum(cube, reg_file, mode="sum"):
@@ -32,20 +32,18 @@ def extract_spectrum(cube, reg_file, mode="sum"):
         Mode can be sum for integrated spectrum, average or psf
     """
     try:
-        reg = read_ds9(reg_file)[0]
+        reg = Regions.read(reg_file, format="ds9")[0]
 
         centerra = reg.center.fk5.ra
         centerdec = reg.center.fk5.dec
 
         region_type = type(reg).__name__
 
-        subcube = cube.copy()
-
         if region_type == 'CircleSkyRegion':
             radius = reg.radius
             try:
-                subcube = subcube.subcube_circle_aperture((centerdec.value, centerra.value), radius.value,
-                                                          lbda=None, unit_center=centerra.unit,
+                cube.mask_region((centerdec.value, centerra.value), radius.value,
+                                                          inside=False, unit_center=centerra.unit,
                                                           unit_radius=radius.unit, unit_wave=cube.wave.unit)
                 logger.info("Extracting spectrum from cube %s around position (%s) for region %s" % (cubefile,
                             (centerra, centerdec), region_type))
@@ -54,47 +52,60 @@ def extract_spectrum(cube, reg_file, mode="sum"):
                 return None, None
 
         elif region_type == 'EllipseSkyRegion':
+            # fucking ds9 internally multiplies by two the radii of the ellipse to obtain width and height (!) so we divide by a factor 2 cause mpdaf wants radii
             width = reg.width
             height = reg.height
             angle = reg.angle
 
-            subcube.mask_ellipse((centerdec.value, centerra.value), (width.value, height.value), angle.value, inside=False,
+            cube.mask_ellipse((centerdec.value, centerra.value), (width.value / 2, height.value / 2), angle.value, inside=False,
                                  lmin=None, lmax=None, unit_center=centerra.unit, unit_radius=height.unit)
             logger.info("Extracting spectrum from cube %s around position (%s) for region %s" % (cubefile,
                         (centerra, centerdec), region_type))
         elif region_type == 'CircleAnnulusSkyRegion':
             inner_radius = reg.inner_radius
             outer_radius = reg.outer_radius
-            subcube.mask_region((centerdec.value, centerra.value), inner_radius.value, inside=True,
+            cube.mask_region((centerdec.value, centerra.value), inner_radius.value, inside=True,
                                  lmin=None, lmax=None, unit_center=centerra.unit, unit_radius=inner_radius.unit)
-            subcube.mask_region((centerdec.value, centerra.value), outer_radius.value, inside=False,
+            cube.mask_region((centerdec.value, centerra.value), outer_radius.value, inside=False,
                                  lmin=None, lmax=None, unit_center=centerra.unit, unit_radius=inner_radius.unit)
             logger.info("Extracting spectrum from cube %s around position (%s) for region %s" % (cubefile,
                         (centerra, centerdec), region_type))
-
-    except DS9RegionParserError as e:
+        elif region_type == "RectangleSkyRegion":
+            half_width = reg.width / 2
+            half_height = reg.height / 2
+            angle = reg.angle.to("degree").value # in degrees
+            cube.mask_region((centerdec.value, centerra.value), (half_width.value, half_height.value),
+                                                      inside=False, unit_center=centerra.unit,
+                                                      unit_radius=half_width.unit, unit_wave=cube.wave.unit, posangle=angle)
+        else:
+            raise ValueError("Region type %s not implemented(!)" % region_type)
+    except ValueError as e:
         print(e)
         logger.warning("Region %s not implemented yet. Will use a mask to approximate the region" % region_type)
         mask = mu.region_to_mask(cube[0, :, :], region_file)
         # mask every pixel of the cube with the mask
-        subcube.mask[:, :, :] = mask
+        extended_mask = np.tile(mask[:, :, np.newaxis], (1, 1, num_slices))
+        #cube.mask[:, :, :] = mask
+        cube.maks_selection(extended_mask)
 
-    subcube.crop()
-    subcube.info()
+    cube.crop()
+    cube.info()
+    cube.write("%s/test.fits" % outdir)
 
     if extraction_mode == 'sum':
         logger.info("Summing output spectra")
-        spe = subcube.sum(axis=(1, 2))
+        spe = cube.sum(axis=(1, 2))
     elif extraction_mode == 'mean':
         logger.info("Averaging output spectra")
-        spe = subcube.mean(axis=(1, 2))
+        spe = cube.mean(axis=(1, 2))
+
     elif extraction_mode == 'psf':
         if args.psf is None:
             logger.error("PSF mode requires a fits file PSF")
             sys.exit()
         else:
 
-            white_light_image = subcube.sum(axis=0)
+            white_light_image = cube.sum(axis=0)
 
             psf_table, header, headername = mu.read_psf_fits(args.psf, extension)
 
@@ -104,7 +115,7 @@ def extract_spectrum(cube, reg_file, mode="sum"):
                 avg_beta = None
 
             logger.info("Creating PSF cube...")
-            psf_cube = psf.create_psf_cube(subcube.shape, psf_table["FWHM"], avg_beta, subcube.wcs)
+            psf_cube = psf.create_psf_cube(cube.shape, psf_table["FWHM"], avg_beta, cube.wcs)
             psf_moffat = Image(wcs=white_light_image.wcs, data=np.sum(psf_cube, axis=0), cmap='inferno', mask=white_light_image.mask)
             peak_center = psf_moffat.peak()
             energy_square_size_x, energy_square_size_y = psf_moffat.ee_size(center=(peak_center['y'], peak_center['x']), cont=0, frac=e_fraction)
@@ -132,18 +143,18 @@ def extract_spectrum(cube, reg_file, mode="sum"):
             ex_region_image = plt.Circle(center_pix, radius / white_light_image.get_step('arcsec')[0], color='b', fill=False)
             image_ax.add_artist(ex_region_image)
             white_light_image.plot(ax=image_ax)
-            plt.show()
+            #plt.show()
             logger.info("Cutting extraction region encircling %.1f %% of the energy..." % e_fraction)
-            subcube = subcube.subcube_circle_aperture((peak_wimage['y'], peak_wimage['x']), radius, unit_center='deg', unit_radius='arcsec',
+            cube = cube.subcube_circle_aperture((peak_wimage['y'], peak_wimage['x']), radius, unit_center='deg', unit_radius='arcsec',
                                                       unit_wave=cube.wave.unit)
-            subcube.crop()
+            cube.crop()
             # cut PSF again with new cube (maybe unnecessary but just so the mask and the cube sizes match)
-            psf_cube = psf.create_psf_cube(subcube.shape, psf_table["FWHM"], avg_beta, subcube.wcs)
+            psf_cube = psf.create_psf_cube(cube.shape, psf_table["FWHM"], avg_beta, cube.wcs)
 
             logger.info("Extracting spectrum weighted by PSF")
-            dummy_mask = np.ones((subcube.shape[1], subcube.shape[2]))  # dummy mask required by the method
-            spe = compute_optimal_spectrum(subcube, dummy_mask, psf_cube)
-    return spe, subcube
+            dummy_mask = np.ones((cube.shape[1], cube.shape[2]))  # dummy mask required by the method
+            spe = compute_optimal_spectrum(cube, dummy_mask, psf_cube)
+    return spe, cube
 
 
 def make_extraction_image(image, source_region, background_region=None, outdir="."):
@@ -172,7 +183,7 @@ ap.add_argument("-b", "--background", nargs="?", help="Background region", type=
 ap.add_argument("-o", "--outdir", nargs='?', help="Name of the output directory", default="subcubes", type=str)
 ap.add_argument("--psf", help='Fits file containing the FWHM as a function of wavelength', type=str, nargs='?', default=None)
 ap.add_argument("--e_fraction", help='Energy fraction to be enclosed in the extraction region', type=float, nargs='?', default=0.5)
-ap.add_argument("-mode", choices=["sum", "mean", "psf"], default="sum")
+ap.add_argument("-m", "--mode", choices=["sum", "mean", "psf"], default="sum", help="Default: sum")
 ap.add_argument("--ext", help='Extension to read from the PSF fits file', type=int, nargs='?', default=2)
 
 args = ap.parse_args()
@@ -181,6 +192,7 @@ muse_cubes = args.input_files
 region_file = args.region[0]
 outdir = args.outdir
 extraction_mode = args.mode
+outdir = args.outdir + "_" + extraction_mode
 extension = args.ext
 
 e_fraction = args.e_fraction
@@ -210,7 +222,7 @@ if not os.path.isdir(outdir):
 
 for cubefile in muse_cubes:
 
-    outname = 'subcube%s' % (region_file.replace(".reg", ""))
+    outname = 'subcube%s' % (os.path.basename(region_file).replace(".reg", ""))
 
     outcubename = os.path.basename(cubefile).replace(".fits", "")
     if os.path.isfile(cubefile):
@@ -222,14 +234,16 @@ for cubefile in muse_cubes:
     else:
         logger.error("Cube %s not found. Skipping..." % cubefile)
         continue
-
+    make_extraction_image(cube.sum(axis=0), region_file, args.background, outdir)
     source_spe, source_subcube = extract_spectrum(cube, region_file, args.mode)
     # create white light image
     if white_light_image is None:
         white_light_image = source_subcube.sum(axis=0)
         white_light_image.write("%s/%s%s_img.fits" % (outdir, outcubename, outname))
-        white_light_image = None # free memory
-    source_subcube.write("%s/%s%s_subcube.fits" % (outdir, outcubename, outname))
+        logger.info("Number of pixels used in the extraction region: %d" %np.ma.count(white_light_image.data))
+
+        del(white_light_image) # free memory
+    #source_subcube.write("%s/%s%s_subcube.fits" % (outdir, outcubename, outname))
 
     # background region is present, subtract it from the source spectrum
     if args.background is not None:
@@ -237,14 +251,14 @@ for cubefile in muse_cubes:
         bkg_subcube_wl = bkg_subcube.sum(axis=0)
         bkg_subcube_wl.write("%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
         # free memory
-        bkg_subcube = None
-        bkg_subcube_wl = None
+        del(bkg_subcube)
+        del (bkg_subcube_wl)
         back_spe.write("%s/%s%s_bkgspec.fits" % (outdir, outcubename, outname))
         if args.mode == "sum":
             logger.info("Subtracting scaled background...")
-            bkg_reg = read_ds9(args.background)[0]
+            bkg_reg = Regions.read(args.background, format="ds9")[0]
             bkg_area = mu.region_to_aperture(bkg_reg, cube.wcs.wcs).area
-            source_reg = read_ds9(region_file)[0]
+            source_reg = Regions.read(region_file, format="ds9")[0]
             source_area = mu.region_to_aperture(source_reg, cube.wcs.wcs).area
             back_spe *= source_area / bkg_area
         corrected_spe = source_spe - back_spe
@@ -257,9 +271,8 @@ for cubefile in muse_cubes:
         logger.error("Region not implemented yet, skipping cube %s" % cubefile)
         continue
 
-    source_subcube = None # free memory
-    make_extraction_image(cube.sum(axis=0), region_file, args.background, outdir)
-    cube = None # free memory
+    del source_subcube # free memory
+    del cube # free memory
 
     plt.figure()
     source_spe.info()
@@ -267,6 +280,7 @@ for cubefile in muse_cubes:
     plt.savefig("%s/%s%s_source_spe.png" % ((outdir, outcubename, outname)))
 
     logger.debug('Writing outputs to %s...' % outdir)
+    source_spe.primary_header["COMMENT"] = "Spectrum extracted from %s using mode: %s" % (region_file, args.mode)
     source_spe.write("%s/%s%s_sourcespec.fits" % (outdir, outcubename, outname))
     mu.plot_image("%s/%s%s_whiteimage" % (outdir, outcubename, outname), "%s/%s%s_img.fits" % (outdir, outcubename, outname))
     if args.background is not None:
