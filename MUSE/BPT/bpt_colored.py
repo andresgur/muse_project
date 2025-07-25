@@ -23,7 +23,6 @@ from mpdaf.obj import Image
 import muse_utils as mu
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Circle
-from line_utils import ratio_maker
 from astropy.wcs import WCS
 from configparser import ConfigParser, ExtendedInterpolation
 from bpt.bpt import BPT_1, BPT_2, BPT_3
@@ -100,18 +99,31 @@ def plot_bpt_map(image, colormap=ListedColormap(["blue", "green", "pink", "orang
     img_figure.savefig(outfile, bbox_inches="tight", pad_inches=0.4)
 
 
-def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
+def bpt_single(map_1, logy, regs, conts, mplcolormaps, grid_ax=None, ext=0):
+
+    """Create a BPT diagram from a single line ratio map and the y-axis values
+    
+    
+    Returns
+    --------
+    array
+        The BPT data color coded for the spatial map
+    array
+        The BPT indexes (0, 1, 2, 3)
+    figure
+        A matplotlib figure with the BPT diagram
+    """
 
     x_axis_map = fits.open(map_1)
-    logx = np.log10(x_axis_map[0].data.data)
+    logx = np.log10(x_axis_map[ext].data.data)
     invalid_pixels = np.where((np.isnan(logx)) | (np.isnan(logy)))
 
     #logx = logx[invalid_pixels]
     #logy = logy[invalid_pixels]
 
     # 0 for composite or LINER
-    bpt_data = np.zeros(x_axis_map[0].data.shape)
-    bpt_indexes = np.zeros(x_axis_map[0].data.shape)
+    bpt_data = np.zeros(x_axis_map[ext].data.shape, dtype=float)
+    bpt_indexes = np.zeros(x_axis_map[ext].data.shape) # cannot do int as we use np.nan later on
 
     figure, ax = plt.subplots(1)
 
@@ -190,7 +202,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         grid_ax.plot(agnliner_def, bpt_diagram.agnliner_crv(agnliner_def), color='red', zorder=100)
     regions = [starform_regions, int_regions, agn_regions, liner_regions]
     # ploting the regions
-    for map, region_index in zip(colormap, regions):
+    for cmap, region_index in zip(mplcolormaps, regions):
         # masking the nan and infinite values
         mask = ((np.isnan(bpt_data[region_index])) | (np.isinf(bpt_data[region_index])))
         region = np.ma.masked_array(bpt_data[region_index], mask)
@@ -199,7 +211,6 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
         if region_c.size == 0:
             # no values for this region
             continue
-        cmap = mpl.cm.get_cmap(map)
         # apply offset to the minimum avoid very light colors
         norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
                                      vmax=np.nanpercentile(region_c, 99))
@@ -210,27 +221,7 @@ def bpt_single(map_1, logy, regs, conts, bptype, colormap, grid_ax=None):
 
     # save fits files
     # colored maps
-    outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
-    data = bpt_data
-    bpt_fits = fits.PrimaryHDU(data=data, header=x_axis_map[0].header)
-    if "WCSAXES" in bpt_fits.header:
-        if bpt_fits.header["WCSAXES"] == 3:
-            bpt_fits.header["WCSAXES"] = 2
-    bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
-    bpt_fits.writeto(outfile, overwrite=True)
-    # single indexes maps
-    outfile = "%s/BPT_%d.fits" % (outdir, bpt_type)
-    data = bpt_indexes
-    bpt_fits = fits.PrimaryHDU(data=data, header=x_axis_map[0].header)
-    if "WCSAXES" in bpt_fits.header:
-        if bpt_fits.header["WCSAXES"] == 3:
-            bpt_fits.header["WCSAXES"] = 2
-    bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bptype
-    bpt_fits.writeto(outfile, overwrite=True)
-    # save figure
-    figure.savefig("%s/coloredBPT_%d.png" % (outdir, bpt_type))
-    plt.close(figure)
-    return bpt_indexes
+    return bpt_data, bpt_indexes, figure
 
 
 def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
@@ -317,7 +308,7 @@ def bpt_proj(map_N2, map_S2,map_R3, regs, conts, colormap, grid_ax=None):
         if region_c.size == 0:
             # no values for this region
             continue
-        cmap = mpl.cm.get_cmap(map)
+        cmap = mpl.colormaps[map]
         # apply offset to the minimum avoid very light colors
         norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
                                      vmax=np.nanpercentile(region_c, 99))
@@ -345,19 +336,15 @@ args = ap.parse_args()
 outdir = args.outdir
 if not os.path.isdir(outdir):
     os.mkdir(outdir)
-#line names used for the automatic computation
-#nested arrays of uneven dimension lengths and python are a pain so we create it carefully
-
-bpt_lines=[[['OIII5007'],['HBETA']],
-           [['NII6583'],['HALPHA']],
-           [['SII6716','SII6731'],['HALPHA']],
-           [['OI6300'],['HALPHA']]]
 
 # define colors for each BPT region
 colormap = ["Blues", "Greens", "Purples", "Oranges"]
+mplcolormaps = [mpl.colormaps[map] for map in colormap]
 
-if os.path.isfile('%s/.config/matplotlib/stylelib/paper.mplstyle' % os.environ["HOME"]):
-    plt.style.use('%s/.config/matplotlib/stylelib/paper.mplstyle'  % os.environ["HOME"])
+
+stylefile = "%s/.config/matplotlib/stylelib/paper.mplstyle" % os.environ["HOME"]
+if os.path.isfile(stylefile):
+    plt.style.use(stylefile)
 
 # read config file
 bptcfg = ConfigParser(interpolation=ExtendedInterpolation())
@@ -370,11 +357,11 @@ lineratiomaps = [lineratio_paths["n2_ha"], lineratio_paths["s2_ha"], lineratio_p
 
 '''STANDARD DIAGRAMS'''
 
-ymap = Image(lineratio_paths["o3_hb"])
+ymap = Image(lineratio_paths["o3_hb"], ext=1)
 print("WARNING: values below -1.0 for  [OIII]/Hb are being ignored")
 ymap.data[np.where(np.log10(ymap.data) < -1.0)] = np.nan
 logy = np.log10(ymap.data.data)
-
+print(ymap.wcs.wcs)
 grid_figure, grid_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, figsize=(25.6, 9.8))
 grid_img_figure, grid_im_axes = plt.subplots(1, 3, sharey=True, gridspec_kw={"wspace": 0.05}, subplot_kw={'projection': ymap.wcs.wcs}, figsize=(25.6, 9.8))
 grid_axes[0].set_ylabel("log([OIII]/H$_\\beta$)")
@@ -386,9 +373,9 @@ if bptcfg.has_section("ULX_position"):
     dec=float(bptcfg["ULX_position"]["dec"])
     err=float(bptcfg["ULX_position"]["err"])/3600
     circle=(ra, dec, err)
-    
+
     for i in range(len(grid_im_axes)):
-        c = Circle(circle[:2],circle[2], 
+        c = Circle(circle[:2],circle[2],
                     edgecolor='lime',
                     transform=grid_im_axes[i].get_transform('fk5'),
                     facecolor='none', lw=5)
@@ -400,23 +387,45 @@ for myax in grid_im_axes[1:]:
 
 for i, ratiomap in enumerate(lineratiomaps):
     bpt_type = i + 1
-    bpt_indexes = bpt_single(ratiomap, logy, args.regions,
-                                               args.contours, bpt_type, colormap, grid_axes[i])
-    outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
-    bpt_img = Image(outfile)
-
-    img_figure, ax = plt.subplots(1, subplot_kw={'projection': bpt_img.wcs.wcs})
+    bpt_map, bpt_indexes, figure = bpt_single(ratiomap, logy, args.regions,
+                                               args.contours, mplcolormaps, grid_axes[i], ext=1)
     
+
+    outfile = "%s/coloredBPT_%d.fits" % (outdir, bpt_type)
+    # map
+    data = bpt_map
+    bpt_fits = fits.PrimaryHDU(data=data, header=ymap.primary_header)
+    if "WCSAXES" in bpt_fits.header:
+        if bpt_fits.header["WCSAXES"] == 3:
+            bpt_fits.header["WCSAXES"] = 2
+    bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bpt_type
+    bpt_fits.writeto(outfile, overwrite=True)
+
+    # single indexes maps
+    outfile = "%s/BPT_%d.fits" % (outdir, bpt_type)
+    data = bpt_indexes
+    bpt_fits = fits.PrimaryHDU(data=data, header=ymap.primary_header)
+    if "WCSAXES" in bpt_fits.header:
+        if bpt_fits.header["WCSAXES"] == 3:
+            bpt_fits.header["WCSAXES"] = 2
+    bpt_fits.header['COMMENT'] = "BPT diagram %d (1: log(OIII/Hb) vs log(NII/Ha), 2:log(OIII/Hb) vs log(SII/Ha), 3:log(OIII/Hb) vs log(OI/Ha))" % bpt_type
+    bpt_fits.writeto(outfile, overwrite=True)
+    # save figure
+    figure.savefig("%s/coloredBPT_%d.png" % (outdir, bpt_type))
+    plt.close(figure)
+
+    img_figure, ax = plt.subplots(1, subplot_kw={'projection': ymap.wcs.wcs})
+
     if bptcfg.has_section("ULX_position"):
-        c = Circle(circle[:2],circle[2], 
+        c = Circle(circle[:2],circle[2],
                     edgecolor='lime',
                     transform=ax.get_transform('fk5'),
                     facecolor='none', lw=1.5)
         ax.add_patch(c)
-    
-    for index, map in enumerate(colormap):
+
+    for index, cmap in enumerate(mplcolormaps):
         mask = ((bpt_indexes != index) | (np.isnan(bpt_indexes)))
-        region = np.ma.masked_array(bpt_img.data, mask)
+        region = np.ma.masked_array(bpt_map.data, mask)
         mask_inf = ((np.isnan(region)) | (np.isinf(region)))
         region = np.ma.masked_array(region, mask_inf)
         # getting a list of only unmasked values
@@ -424,7 +433,6 @@ for i, ratiomap in enumerate(lineratiomaps):
         if region_c.size == 0:
             # no values for this region
             continue
-        cmap = mpl.cm.get_cmap(map)
         # apply offset to the minimum avoid very light colors
         norm = mpl.colors.Normalize(vmin=np.nanmin(region_c, 0) - 0.2,
                                               vmax=np.nanpercentile(region_c, 99))
@@ -449,8 +457,8 @@ for i, ratiomap in enumerate(lineratiomaps):
 
     if args.regions is not None:
         for region in args.regions:
-            mu.plot_regions(region, ax, bpt_img.data_header)
-            mu.plot_regions(region, grid_im_axes[i], bpt_img.data_header)
+            mu.plot_regions(region, ax, ymap.primary_header)
+            mu.plot_regions(region, grid_im_axes[i], ymap.primary_header)
     img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4, dpi=200)
     print("Results stored to %s" % outfile)
 grid_figure.savefig("%s/grid_bpts.png" % outdir)
@@ -474,7 +482,7 @@ if False:
         if region.size == 0:
             continue
         #bpt_img.mask_selection(region)
-        cmap = mpl.cm.get_cmap(map)
+        cmap = mpl.colormarp[map]
         #norm = mpl.colors.Normalize(vmin=np.nanmin(region), vmax=np.nanmax(region))
         ax_proj.imshow(region, cmap=cmap, origin="lower")
         bpt_img.unmask()
