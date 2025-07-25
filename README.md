@@ -12,9 +12,17 @@ aperture_photometry.py --> Script to retrieve magnitudes, fluxes from a given ds
 
 astro_corr.py --> Script to refine the astrometry of several HST images (more than one is possible, and the solution will be global to all of them) using the gaia catalogue. It uses tweakreg https://drizzlepac.readthedocs.io/en/latest/tweakreg.html.
 
-## MUSE
-----reddening----
+# MUSE
 
+## Line ratios
+lineratio.py --> Script to perform the radio between two line flux maps
+
+```
+python lineratio.py -n NUMERATORS [NUMERATORS ...] [-en ENUMERATORS [ENUMERATORS ...]] -d DENOMINATOR [DENOMINATOR ...] [-ed EDENOMINATOR [EDENOMINATOR ...]] [-o [OUTDIR]] [-f [FILE]
+```
+Where numeratos and denominators are a space-separed list of fits files. The files with an "e" prefix are the uncertainty maps. -o and -f control the output dir and file naming.
+
+## Reddening
 deredden.py --> Script to deredden flux line maps, it needs as input the balmer decrement map (Halpha/Hbeta) and it will automatically localize the flux maps
 
 deredden_momcheva.py --> Script to deredden flux line maps (based on e.g. [1](http://arxiv.org/abs/1207.5479) see the Appendix), it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them (python deredden_momcheva.py -a halpha_path -b hbeta_path -Rv 4.05 -i 2.86). It creates a map of E(B-V) and one with the uncertainty on E(B-V)
