@@ -265,6 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--sigma", nargs='?', help="Initial guess for the width (sigma) of the lines in Angstroms. Default 1.4 Angstroms", default=1.4, type=float)
     parser.add_argument("-o", "--outdir", nargs='?', help="Name of the output directory", default="voronoi", type=str)
     parser.add_argument("input_cube", help="Path to input cube to be analysed", type=str)
+    parser.add_argument("-w", "--window", help="+- Angstroms to cut the spectrum around each line centroid. Default 25 Angstroms. Reduce for lines close to telluric lines (e.g. [OI]6300)", type=float, default=25)
     parser.add_argument("-c", "--cpus", nargs='?', help="Number of CPUs to use for parallelization. By default it uses all -1 available cpus", type=int)
     parser.add_argument("-l", "--linegroups", nargs='+', default="HeII4686", help="Space-separated groups of comma-separated lines to fit. (e.g. if you want two groups with same continuum: HBETA OIII4959,OIII5007)", type=str) # 
     args = parser.parse_args()
@@ -291,7 +292,7 @@ if __name__ == "__main__":
 
     redshift = args.redshift
     # Margins to cut the spectrum around the blue and red lines of each group
-    margin = 25 # Angstroms
+    margin = args.window # Angstroms
 
     # create waveleneght cuts
     wav_cuts = np.zeros((len(inputgroups), 2), dtype=float)
@@ -325,6 +326,7 @@ if __name__ == "__main__":
     # in the wavelength range of interest, keep the original mask
     for index, wav_range in enumerate(wav_cuts):
         lmin, lmax = wav_range
+        print(f"Masking wavelength range {lmin} - {lmax} Angstroms")
         minindex = data_cube.wave.pixel(lmin, nearest=True)
         maxindex = data_cube.wave.pixel(lmax, nearest=True)
         # Unmask this wavelength range, but preserve original mask
@@ -449,10 +451,11 @@ if __name__ == "__main__":
         outfile.write("%s/%s_snr.fits" % (outpath, line))
         
     outfile.data = outmaps["redchi"]
-    outfile.write("%s/redchi.fits" % outpath)
+    linegroupout = "_".join([line for group in linegroups for line in group])
+    outfile.write(f"{outpath}/redchi_{linegroupout}.fits")
 
     # residual_cube.write("%s/residual_cube.fits" % outpath)
-    np.savetxt(f"{outpath}/fit_results.txt",
+    np.savetxt(f"{outpath}/fit_results_{linegroupout}.txt",
                np.array([xs, ys, redchis, ndofs, ndata]).T,
                header="x\ty\tredchi\tndof\tndata",
                fmt="%d\t%d\t%.4f\t%d\t%d")
