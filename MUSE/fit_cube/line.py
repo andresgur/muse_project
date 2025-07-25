@@ -37,7 +37,7 @@ class Lines:
         self.lines = {}
         # ref always to the higher wavelength line
         self.append(Line("HeII4686", 4685.682))
-        self.append(Line('HBETA', 4859))
+        self.append(Line('HBETA', 4861.32))
         self.append(Line('OIII4959', 4958.911))
         self.append(Line('OIII5007', 5006.843, ref='OIII4959', low=2.5, up=3.3, th=2.94))
         self.append(Line("HeI5875", 5875))
