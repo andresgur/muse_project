@@ -134,9 +134,9 @@ if not len(denominator_data): # list is empty maps were not found
 
 # get the header from one of the files (or the next one in case it doesn't exist)
 if os.path.isfile(linemaps_denominator[0]):
-    header = fits.open(linemaps_denominator[0])[0].header
+    header = fits.open(linemaps_denominator[0])["DATA"].header
 else:
-    header = fits.open(linemaps_denominator[1])[0].header
+    header = fits.open(linemaps_denominator[1])["DATA"].header
 
 
 ratio_fits = fits.HDUList(fits.PrimaryHDU(header=header))
