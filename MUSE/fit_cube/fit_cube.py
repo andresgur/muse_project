@@ -11,12 +11,68 @@ from lmfit.models import PolynomialModel, GaussianModel
 import numpy.ma as ma
 import matplotlib.pyplot as plt
 from astropy.utils.exceptions import AstropyWarning
+from astropy.constants import c
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('fit_cube')
 warnings.filterwarnings('ignore', category=AstropyWarning, module='astropy')
+warnings.filterwarnings('ignore', message='.*UFloat objects with std_dev==0.*')
 CATALOG_LINES = Lines()
+ckms = 299792.458
+
+
+def peculiar_velocity(reference, wavelength, ewavelength=0, z_sys=0):
+    """Calculate the peculiar velocity of a line given its reference wavelength and observed wavelength. See https://academic.oup.com/mnras/article/442/2/1117/983284 Eq 12.
+    Works for relativistic velocities too. All wavelengths in same units.
+    
+    Parameters
+    ----------
+    reference: float
+        Reference wavelength
+    wavelength: float
+        Observed wavelength
+    ewavelength: float
+        Uncertainty in observed wavelength
+    z_sys: float
+        Systemic redshift
+
+    Returns
+    -------
+    float or array-like
+        Peculiar velocity in km/s
+    float or array-like
+        Uncertainty in peculiar velocity in km/s
+    """
+    z = wavelength / reference - 1
+    ez = ewavelength / reference
+    zp = (z - z_sys) / (1 + z_sys)
+    ezp = ez / (1 + z_sys)
+    factor = (1 + zp)**2
+    efactor = 2 * (1 + zp) * ezp
+    vp = ckms * (factor - 1) / (factor + 1)
+    #df/factor = 1 x (factor + 1) - (factor -1)X1 / (factor + 1)^2 ==> 2 / (Factor + 1)^2
+    evp = ckms * 2 * efactor / (factor + 1)**2
+    return vp, evp
+
+
+def get_instrument_FWHM(wavelength, ewavelength=0):
+    """Get MUSE FWHM LSF based on Bacon et al. 2017 Equation 8 (see also Benoit et al. 2018) 1
+    Parameters
+    ----------
+    wavelength: float or array-like
+        Wavelength in Angstroms
+
+    Returns
+    ------- 
+    fwhm: float or array-like
+        FWHM in Angstroms
+    efwhm: float or array-like
+        Uncertainty in FWHM in Angstroms
+    """
+    A = 5.866 * 1e-8
+    B = 9.187 * 1e-4
+    return A * wavelength ** 2 - B * wavelength + 6.04, A * 2 * wavelength * ewavelength - B * ewavelength
 
 def get_initial_fit(model, x):
     params = model.make_params()
@@ -101,44 +157,43 @@ def fit_spectrum(spectrum_pixels, fit_lines, redshift, sigma, wavelengths, wav_c
     degree:int,
         Degree of the polynomial to fit the continuum
     """
-    spectrum, (x, y) = spectrum_pixels
+    spectrum, (y, x) = spectrum_pixels
     spectrumfluxes = spectrum.data
     if spectrumfluxes.all() is np.ma.masked:
-        logger.warning("Spectrum at X:%d Y%d completely masked, skipping" % (x, y))
+        logger.debug("Spectrum at X:%d Y%d completely masked, skipping" % (x, y))
         return None
     else:
         usefulfluxes = spectrumfluxes[~spectrumfluxes.mask].data
         usefulwavelengths = wavelengths[~spectrumfluxes.mask]
-        #if spectrum.var is not None:
-        usefulvar = spectrum.var[~spectrumfluxes.mask]
-        #else:
-         #   usefulvar = np.full(usefulfluxes.shape, np.var(usefulfluxes), dtype=float)
+        if spectrum.var is not None:
+            usefulvar = spectrum.var[~spectrumfluxes.mask]
+        else:
+            usefulvar = np.full(usefulfluxes.shape, np.var(usefulfluxes), dtype=float)
     # create lmfit model
         line_model = create_line_model(fit_lines, redshift, sigma=args.sigma)
         cont_prefix = 'cont'
         cont_model = PolynomialModel(degree=degree, prefix="%s_" %cont_prefix)
         line_model += cont_model     
         nparams = len(line_model.param_names)
-
+    # check if we have enough fluxes to fit the model
         if nparams > len(usefulfluxes):
-            logger.warning("Spectrum at X:%d Y%d has only %d fluxes but %d parameters, skipping" % (x, y, len(usefulfluxes), nparams))
+            logger.debug("Spectrum at X:%d Y%d has only %d fluxes but %d parameters, skipping" % (x, y, len(usefulfluxes), nparams))
             return None
    
     _, median, _ = sigma_clipped_stats(usefulfluxes, sigma=3)
-    # min should be 0, but data is noisy so let's set it to the min of the data
-    line_model.set_param_hint("%s_c0" % cont_prefix, value=median, vary=True, min=np.min(usefulfluxes), max=np.max(usefulfluxes))
+    # min should be 0, but data is noisy so let's set it to the min of the data. Add 0.1 to avoid same min max
+    line_model.set_param_hint("%s_c0" % cont_prefix, value=median, vary=True, min=np.min(usefulfluxes), max=np.max(usefulfluxes) + 0.1)
     line_model.set_param_hint("%s_c1" % cont_prefix, value=0, vary=True)
     
-    for index, wav_range in enumerate(wav_cuts):
+    for group in linegroups:
         # mask the fluxes and return the new fluxes with more masked values
         # mask outside the wavelength range of interest
         # these fluxes are just to compute the initial values of the lines
-        for linename in linegroups[index]:
+        for linename in group:
             # assign sigma and amplitude base on data
             refline = CATALOG_LINES.lines[linename].ref
             if refline is None:
                 centroid = line_model.param_hints[f"{linename}_center"]["value"]
-                # we could use usefulwavelengths but if too little values this breaks
                 central_wavelength = np.argmin(np.abs(usefulwavelengths - centroid))
                 min_ind = central_wavelength - 4 if central_wavelength - 4 > 0 else 0
                 max_ind = central_wavelength + 4 if central_wavelength + 4 < len(usefulwavelengths) else len(usefulwavelengths) - 1
@@ -146,54 +201,58 @@ def fit_spectrum(spectrum_pixels, fit_lines, redshift, sigma, wavelengths, wav_c
 
                 sigma = line_model.param_hints[f"{linename}_sigma"]["value"]
                 init_amplitude = (usefulfluxes[peak_index] - median) * np.sqrt(2 * np.pi * (sigma ** 2))
-                line_model.set_param_hint("%s_amplitude" % linename, value=init_amplitude, vary=True, min=1e-10)
+                line_model.set_param_hint("%s_amplitude" % linename, value=init_amplitude, vary=True, min=0, max=init_amplitude * 50 + 1)
             else:
                 line_model.set_param_hint("%s_factor" % linename, value=CATALOG_LINES.lines[linename].th, 
                                           min=CATALOG_LINES.lines[linename].low, max=CATALOG_LINES.lines[linename].up)
                 line_model.set_param_hint(name="%s_amplitude" % linename, expr='%s_amplitude * %s_factor' % (refline, linename))
     # mask the range we want to use
     # do this in a two step process
-    fluxes = ma.masked_where( (usefulwavelengths < wav_cuts[0][0]) | (usefulwavelengths > wav_cuts[0][1]), usefulfluxes)
+    #fluxes = ma.masked_where( (usefulwavelengths < wav_cuts[0][0]) | (usefulwavelengths > wav_cuts[0][1]), usefulfluxes)
 
     # the for loop won't be entered if wav_cuts has only one element
-    for wav_range in wav_cuts[1:]:
-        fluxes = ma.masked_where((usefulwavelengths < wav_range[0]) | (usefulwavelengths > wav_range[1]), fluxes)
+    #for wav_range in wav_cuts[1:]:
+     #   fluxes = ma.masked_where((usefulwavelengths < wav_range[0]) | (usefulwavelengths > wav_range[1]), fluxes)
     
-    if fluxes.all() is np.ma.masked:
-        logger.warning("Spectrum at X:%d Y%d completely masked after filtering, skipping" % (x, y))
-        return None
-    if nparams > len(fluxes[~fluxes.mask]):
-        logger.warning("Spectrum at X:%d Y%d has only %d fluxes but %d parameters, skipping" % (x, y, len(fluxes[~fluxes.mask]), nparams))
-        return None
+    #if fluxes.all() is np.ma.masked:
+     #   logger.debug("Spectrum at X:%d Y%d completely masked after filtering, skipping" % (x, y))
+      #  return None
+    #if nparams > len(fluxes[~fluxes.mask]):
+     #   logger.debug("Spectrum at X:%d Y%d has only %d fluxes but %d parameters, skipping" % (x, y, len(fluxes[~fluxes.mask]), nparams))
+      #  return None
         
     logger.debug(f"Full model")
     logger.debug(line_model.param_hints)
-    waves = usefulwavelengths[~fluxes.mask]
-    std_dev = np.sqrt(usefulvar[~fluxes.mask])
-    fluxes = fluxes[~fluxes.mask]
-    logger.debug(f"Fitting spectrum at X:{x} Y:{y} with {len(fluxes)} datapoints with {len(line_model.param_hints)} parameters")
-    #plt.errorbar(waves, fluxes, yerr=std_dev, label=rf'Data (X = {x}, Y = {y})')
-    #plt.plot(waves, get_initial_fit(line_model, waves), label=r'Initial Fit')
-    #plt.legend()
-    result = line_model.fit(fluxes, x=waves, weights=1.0 / std_dev, nan_policy='raise')
+    std_dev = np.sqrt(usefulvar)
+    logger.debug(f"Fitting spectrum at X:{x} Y:{y} with {len(usefulfluxes)} datapoints with {len(line_model.param_hints)} parameters")
+    result = line_model.fit(usefulfluxes, x=usefulwavelengths, weights=1.0 / std_dev, nan_policy='raise')
 
     fit_data = {
         'x': x,
         'y': y,
-        'best_values': result.best_values,  # Convert to regular dict
+        'ndata': result.ndata,
+        'nvarys': result.nvarys,
         'redchi': result.redchi,
         'residual': result.residual.copy(),
+        'noise': np.std(usefulfluxes - result.best_fit),
         'best_fit': result.best_fit.copy(),
         'errorbars': result.errorbars if hasattr(result, 'errorbars') else False,
         #'covar': result.covar.copy() if result.covar is not None else None,
-        #'stderr': dict(result.params.valuesdict()) if hasattr(result, 'params') else None,
+        'params': result.params
     }
+
+    #plt.errorbar(usefulwavelengths, usefulfluxes, yerr=std_dev, label='Data')
+    #plt.plot(usefulwavelengths, get_initial_fit(line_model, usefulwavelengths), label=r'Initial Fit', ls="--")
+    #plt.plot(usefulwavelengths, result.best_fit, label='Best Fit')
+    #plt.show()
     return fit_data
 
 def check_input_lines(linegroups):
-    """Check if the input lines are valid and exist in the catalog"""
+    """Check if the input lines are valid and exist in the catalog
+    
+    """
     for group in linegroups:
-        for line in group:
+        for line in group.split(","):
             if line not in CATALOG_LINES.lines:
                 raise ValueError(f"Line {line} not found in catalog. Please check the line name or add it to the catalog. Available lines: {CATALOG_LINES.lines.keys()}")
     return True
@@ -207,7 +266,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--outdir", nargs='?', help="Name of the output directory", default="voronoi", type=str)
     parser.add_argument("input_cube", help="Path to input cube to be analysed", type=str)
     parser.add_argument("-c", "--cpus", nargs='?', help="Number of CPUs to use for parallelization. By default it uses all -1 available cpus", type=int)
-    parser.add_argument("-l", "--lines", nargs='+', default="HeII4686", help="Space separated lines to fit. (e.g. HBETA OIII4959 OIII5007)", type=str) # 
+    parser.add_argument("-l", "--linegroups", nargs='+', default="HeII4686", help="Space-separated groups of comma-separated lines to fit. (e.g. if you want two groups with same continuum: HBETA OIII4959,OIII5007)", type=str) # 
     args = parser.parse_args()
 
     outpath = args.outdir
@@ -223,32 +282,33 @@ if __name__ == "__main__":
     else:
         cpus = args.cpus
 
+    check_input_lines(args.linegroups)
 
-    linegroup = [["HeII4686"]]#[["HBETA", "OIII4959", "OIII5007"], ["OI6300"],
+    inputgroups = args.linegroups#[["HeII4686"]]#[["HBETA", "OIII4959", "OIII5007"], ["OI6300"],
             #["NII6548","HALPHA", "NII6583"], ["SII6716", "SII6731"]]
             # ["NII5755"], ["HeI5875.64"], 
-
-    for line in linegroup:
-            if line not in CATALOG_LINES.lines:
-                raise ValueError(f"Line {line} not found in catalog. Please check the line name or add it to the catalog. Available lines: {CATALOG_LINES.lines.keys()}")
-
+    logger.info("Line groups: %s",inputgroups)
 
     redshift = args.redshift
     # Margins to cut the spectrum around the blue and red lines of each group
     margin = 25 # Angstroms
 
     # create waveleneght cuts
-    wav_cuts = np.zeros((len(linegroups), 2), dtype=float)
-
+    wav_cuts = np.zeros((len(inputgroups), 2), dtype=float)
+    # we need these variables for later
     fit_lines = []
+    linegroups = []
 
-    for index, group in enumerate(linegroups):
+    for index, group in enumerate(inputgroups):
+        grouplines = group.split(",")
+        linegroups.append(grouplines)
         # make wavelength range based on the first and last line of the group
-        minwav = CATALOG_LINES.lines[group[0]].wave * (1 + redshift) - margin
-        maxwav = CATALOG_LINES.lines[group[-1]].wave * (1 + redshift) + margin
+        minwav = CATALOG_LINES.lines[grouplines[0]].wave * (1 + redshift) - margin
+        maxwav = CATALOG_LINES.lines[grouplines[-1]].wave * (1 + redshift) + margin
         wav_cuts[index] = (minwav, maxwav)
-        for line in group:
+        for line in grouplines:
             fit_lines.append(CATALOG_LINES.lines[line])
+            
     
     # get the first line of the first group and the last line of the last group
     waveinit, waveend = fit_lines[0].wave * (1 + redshift) - margin, fit_lines[-1].wave * (1 + redshift) + margin
@@ -258,6 +318,21 @@ if __name__ == "__main__":
     # cut the cube over the wavelength range we will not needed
     data_cube = data_cube.select_lambda(waveinit - step *1.01, waveend + step * 1.01)
 
+    # mask the data cube outside the wavelength range of interest, important to copy here
+    original_mask = data_cube.data.mask.copy()  
+    # mask the entire range by default
+    data_cube[:,:,:] = ma.masked
+    # in the wavelength range of interest, keep the original mask
+    for index, wav_range in enumerate(wav_cuts):
+        lmin, lmax = wav_range
+        minindex = data_cube.wave.pixel(lmin, nearest=True)
+        maxindex = data_cube.wave.pixel(lmax, nearest=True)
+        # Unmask this wavelength range, but preserve original mask
+        data_cube.data.mask[minindex:maxindex, :, :] = original_mask[minindex:maxindex, :, :]
+
+    if data_cube.data.all() is np.ma.masked:
+        logger.error("All data in the cube is masked. Please check the wavelength range and the input cube.")
+        exit(1)
     wavelengths = data_cube.wave.coord()
 
     logger.info(f"Fitting cube {cubename} with {len(fit_lines)} lines,  {len(linegroups)} line groups, and {cpus} CPUs")
@@ -267,7 +342,7 @@ if __name__ == "__main__":
     if cpus>1:
         results = process_map(partial(fit_spectrum, fit_lines=fit_lines, redshift=z, sigma=sigma, wavelengths=wavelengths, wav_cuts=wav_cuts, linegroups=linegroups), 
                 iter_spe(data_cube, index=True), max_workers=cpus, chunksize=1,
-                unit="Spectra", desc="Fitting spectra", total=total_spectra,)
+                unit=" spectra", desc="Fitting spectra", total=total_spectra)
     else:
         results = []
         for spectrum in iter_spe(data_cube, index=True):
@@ -281,8 +356,15 @@ if __name__ == "__main__":
     outshape = data_cube.shape[1:]
     outmaps = create_out_maps(fit_lines, outshape)
     # cube for residuals
-    residual_cube = data_cube.clone()
-    residual_cube.data = np.zeros(data_cube.shape)
+    #data_cube.crop()
+    #residual_cube = data_cube.clone()
+    #residual_cube.data = np.zeros(data_cube.shape)
+
+    redchis = []
+    ndofs = []
+    ndata = []
+    xs = []
+    ys = []
     
     for fit_data in results:
 
@@ -291,46 +373,87 @@ if __name__ == "__main__":
         else:
             x = fit_data['x']
             y = fit_data['y']
-
-            best_values = fit_data['best_values']
             
             # Store reduced chi square
             outmaps["redchi"][y, x] = fit_data['redchi']
-            
+
+            xs.append(x)
+            ys.append(y)
+            redchis.append(fit_data['redchi'])
+            ndofs.append(fit_data['ndata'] - fit_data['nvarys'])    
+            ndata.append(fit_data['ndata'])
+
+            best_values = fit_data['params']
             for line in fit_lines:
                 # Calculate SNR
-                signal = best_values.get("%s_height" % (line.name))
-                central_wavelength_idx = np.argmin(np.abs(wavelengths - best_values.get("%s_center" % (line.name))))
-                
-                if fit_data['residual'] is not None:
-                    noise = np.sqrt( np.nansum(fit_data['residual']) / len(fit_data['residual']))
-                    outmaps["%s_snr" % (line.name)][y, x] = signal / noise if noise > 0 else np.nan
+                signal = best_values["%s_height" % (line.name)].value
+                noise = fit_data["noise"]
+                outmaps["%s_snr" % (line.name)][y, x] = signal / noise if noise > 0 else np.nan
                 
                 # Store parameter values
                 for par in ["amplitude", "fwhm", "center"]:
                     param_name = "%s_%s" % (line.name, par)
                     if param_name in best_values:
-                        outmaps[param_name][y, x] = best_values[param_name]
-                    
-                    # Store uncertainties if available
-                    if fit_data['stderr'] and param_name in fit_data['stderr']:
-                        outmaps["%s_e%s" % (line.name, par)][y, x] = fit_data['stderr'][param_name]
+                        param = best_values[param_name]
+                        outmaps[param_name][y, x] = param.value
+
+                        if param.stderr is not None:
+                            outmaps["%s_e%s" % (line.name, par)][y, x] = param.stderr
             #warnings.warn("Warning: noise computation might be incorrect: see meaning of residuals here https://lmfit.github.io/lmfit-py/model.html#modelresult-attributes")
-            residual_cube[:, y, x] = fit_data['residual']
+            #residual_cube[:, y, x] = fit_data['residual'] --> we need to fix not all spectra having same number of pixels
 
 
     linepars = ["amplitude", "fwhm", "center"]
+    # dummy skeleton for the output cube
+    outfile = data_cube[0 ,: , :]
     for line in fit_lines:
+        # FWHM corrected map
+        FWHM_inst, eFWHM_inst = get_instrument_FWHM(outmaps["%s_center" % (line.name)], outmaps["%s_ecenter" % (line.name)])
+        # FWHM
+        selector = FWHM_inst > outmaps["%s_fwhm" % (line.name)]
+        FWHM_corrected = np.sqrt(outmaps["%s_fwhm" % (line.name)] ** 2 - FWHM_inst ** 2)
+        FWHM_corrected[selector] = 0 # these are upper limits
+        outfile.data = FWHM_corrected
+        par = "fwhm_corrected"
+        outfile.write("%s/%s_%s.fits" % (outpath, line, par))
+        #eFWHM f = sqrt(A^2-B^2); df/dA = 2A/2f = A/f; df/dB = -2B/2f = -B/f; eFWHM = sqrt((eA/f)^2 + (eB/f)^2) = sqrt(eA^2 + eB^2)/f
+
+        Ae = outmaps["%s_efwhm" % (line.name)] * outmaps["%s_fwhm" % (line.name)]
+        Be = FWHM_inst * eFWHM_inst
+        eFWHM_corrected = np.sqrt(Ae ** 2 + Be ** 2) / FWHM_corrected
+        eFWHM_corrected[selector] = np.nan # these are upper limits
+        outfile.data = eFWHM_corrected
+        par = "efwhm_corrected"
+        outfile.write("%s/%s_%s.fits" % (outpath, line, par))
+
+        # velocity map
+        velocity, evelocity = peculiar_velocity(line.wave, outmaps["%s_center" % (line.name)], 
+                                    ewavelength=outmaps["%s_ecenter" % (line.name)], z_sys=redshift)
+        par = "vel"
+        outfile.data = velocity
+        outfile.write("%s/%s_%s.fits" % (outpath, line, par))
+
+        par = "evel"
+        outfile.data = evelocity
+        outfile.write("%s/%s_%s.fits" % (outpath, line, par))
+
         for par in linepars:
             # parameter value
-            outmaps["%s_%s" % (line, par)].write("%s/%s_%s.fits" % (outpath, line, par))
+            outfile.data = outmaps["%s_%s" % (line, par)]
+            outfile.write("%s/%s_%s.fits" % (outpath, line, par))
             # parameter uncertainty
-            outmaps["%s_e%s" % (line, par)].write("%s/%s_e%s.fits" % (outpath, line, par))
+            outfile.data = outmaps["%s_e%s" % (line, par)]
+            outfile.write("%s/%s_e%s.fits" % (outpath, line, par))
         
-        outmaps["%s_snr" % (line)].write("%s/%s_snr.fits" % (outpath, line))
+        outfile.data = outmaps["%s_snr" % (line)]
+        outfile.write("%s/%s_snr.fits" % (outpath, line))
+        
+    outfile.data = outmaps["redchi"]
+    outfile.write("%s/redchi.fits" % outpath)
 
-    outmaps["redchi"].write("%s/redchi.fits" % outpath)
-
-    #residual_cube.write("%s/residual_cube.fits" % outpath)
-
+    # residual_cube.write("%s/residual_cube.fits" % outpath)
+    np.savetxt(f"{outpath}/fit_results.txt",
+               np.array([xs, ys, redchis, ndofs, ndata]).T,
+               header="x\ty\tredchi\tndof\tndata",
+               fmt="%d\t%d\t%.4f\t%d\t%d")
     print("Output stored in %s" % outpath)
