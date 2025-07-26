@@ -43,7 +43,7 @@ class Lines:
         self.append(Line("HeI5875", 5875))
         self.append(Line("NII5755", 5754.8))
         self.append(Line('OI6300', 6300.3))
-        self.append(Line("OI6363", 6363.78, ref="OI6300", low=2.5, up=3.3, th=3.04))
+        self.append(Line("OI6363", 6363.78, ref="OI6300", low=0.303, up=0.4, th=0.3289)) # theoreitical is 3.04 (OI6300/OI6363 = 3.04) so we use the inverse ratio
         self.append(Line('HALPHA', 6563)) # ref='HBETA', low=2.65, th=2.85, up=6))
         self.append(Line('NII6548', 6548.05))
         self.append(Line('NII6583', 6583.45, ref='NII6548', low=2.5, up=3.3, th=3.))
