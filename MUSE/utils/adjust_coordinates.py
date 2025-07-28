@@ -47,7 +47,6 @@ outcube = '%s/corr%s' % (args.outdir, input_cube)
 
 if os.path.isfile(input_cube) and os.path.isfile(hst_image):
     logger.info("Loading cube %s" % input_cube)
-    cube = Cube(input_cube)
     logger.info("Loading succesful")
     hdul = fits.open(hst_image)
     if hdul[0].header["TELESCOP"] == "HST":
@@ -62,28 +61,46 @@ if os.path.isfile(input_cube) and os.path.isfile(hst_image):
         filter_key = "%s_%s" % (instrument, hst_filter)
         logger.info("Constructing image in the %s filter" % filter_key)
         # free memory
-        del hdul
+        del hdul        
         gc.collect()
+        cube = Cube(input_cube)
+
         try:
             cube_image = cube.get_band_image(filter_key)
-            wlname = "%s/%s" % (args.outdir, input_cube.replace(".fits", "_imgcorr_%s.fits" % filter_key))
-
         except ValueError:
-            print("Filter not found, using white light image instead")
-            wlname = "%s/%s" % (args.outdir, input_cube.replace(".fits, _imgcorr_wlight.fits"))
-            cube_image = cube.sum(axis=0)
+            print(f"Filter {filter_key} not found, attempting to use ACS filter version instead")
+            filter_key = filter_key.replace("WFPC2", "ACS")
+            try:
+                cube_image = cube.get_band_image(filter_key)
+                print(f"Successfully created {filter_key} image")
+            except ValueError:
+                print(f"Filter {filter_key} not found, attempting to use WFC3 filter version instead")
+                filter_key = filter_key.replace("ACS", "WFC3")
+            try:
+                cube_image = cube.get_band_image(filter_key)
+            except ValueError:
+                print(f"Filter {filter_key} not found, reverting to white light image")
+                cube_image = cube.sum(axis=0)
+                filter_key = "white_light"
+        print(f"Successfully created {filter_key} image")
+            
     else:
-        print("Image not recongised, using white light image instead")
-        wlname = "%s/%s" % (args.outdir, input_cube.replace(".fits, _imgcorr_wlight.fits"))
+        cube = Cube(input_cube)
+        filter_key = "white_light"
+        print("Image format not HST, using cube white light image for the coordinate correction")
         cube_image = cube.sum(axis=0)
+    del cube
+    wlname = "%s/%s" % (args.outdir, input_cube.replace(".fits", "_imgcorr_%s.fits" % filter_key))
     # free memory
 
     hst_im = Image(hst_image)
     logger.info("Estimating coordinate offset...")
     dy, dx = cube_image.estimate_coordinate_offset(hst_im, nsigma=nsigma)
     cube_image.adjust_coordinates(hst_im, nsigma=nsigma, inplace=True)
+    del hst_im
     cube_image.write(wlname)
     # update cube WCS header
+    cube = Cube(input_cube)
     cube.wcs.set_crpix1(cube_image.wcs.get_crpix1())
     cube.wcs.set_crpix2(cube_image.wcs.get_crpix2())
     cube.wcs.set_cd(cube_image.wcs.get_cd())
