@@ -122,7 +122,7 @@ def create_line_model(lines, redshift=0.0, sigma=1.4, margin=10):
     return line_model
 
 
-def create_out_maps(lines, shape):
+def create_out_maps(lines, shape, degree=1):
     """Create output maps
     
     lines: list of Line objects
@@ -143,12 +143,15 @@ def create_out_maps(lines, shape):
             # uncertainty map
             outmaps["%s_e%s" % (line, par)] = np.full(shape, np.nan, dtype=float)
 
+    for i in range(degree + 1):
+        outmaps["cont_c%d" % i] = np.full(shape, np.nan, dtype=float)
+        outmaps["cont_ec%d" % i] = np.full(shape, np.nan, dtype=float)
     outmaps["redchi"] = np.full(shape, np.nan, dtype=float)
     outmaps["residuals"] = np.full(shape, np.nan, dtype=float)
     return outmaps
 
 
-def fit_spectrum(spectrum_pixels, fit_lines, redshift, sigma, wavelengths, wav_cuts, linegroups, degree=1):
+def fit_spectrum(spectrum_pixels, fit_lines, redshift, sigma, wavelengths, linegroups, degree=1):
     """Fit a spectrum to the lines defined in fit_lines. The lines are fitted with a Gaussian model and the continuum is fitted with a polynomial model.
     Parameters
     ----------
@@ -172,8 +175,8 @@ def fit_spectrum(spectrum_pixels, fit_lines, redshift, sigma, wavelengths, wav_c
     # create lmfit model
         line_model = create_line_model(fit_lines, redshift, sigma=args.sigma)
         cont_prefix = 'cont'
-        cont_model = PolynomialModel(degree=degree, prefix="%s_" %cont_prefix)
-        line_model += cont_model     
+        cont_model = PolynomialModel(degree=degree, prefix=f"{cont_prefix}_")
+        line_model += cont_model
         nparams = len(line_model.param_names)
     # check if we have enough fluxes to fit the model
         if nparams > len(usefulfluxes):
@@ -200,7 +203,8 @@ def fit_spectrum(spectrum_pixels, fit_lines, redshift, sigma, wavelengths, wav_c
                 peak_index = np.argmax(usefulfluxes[min_ind:max_ind]) + min_ind
 
                 sigma = line_model.param_hints[f"{linename}_sigma"]["value"]
-                init_amplitude = (usefulfluxes[peak_index] - median) * np.sqrt(2 * np.pi * (sigma ** 2))
+                init_amplitude = (usefulfluxes[peak_index] - median) * np.sqrt(2 * np.pi) * sigma 
+                init_amplitude = 0 if init_amplitude < 0 else init_amplitude
                 line_model.set_param_hint("%s_amplitude" % linename, value=init_amplitude, vary=True, min=0, max=init_amplitude * 50 + 1)
             else:
                 line_model.set_param_hint("%s_factor" % linename, value=CATALOG_LINES.lines[linename].th, 
@@ -261,6 +265,7 @@ def check_input_lines(linegroups):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Fit data cube using voronoi binning')
+    parser.add_argument("-d", "--degree", nargs='?', help="Polynomial degree for the continuum", default=1, type=int)
     parser.add_argument("-z", "--redshift", nargs='?', help="Initial guess for the redshift", default=0.0, type=float)
     parser.add_argument("-s", "--sigma", nargs='?', help="Initial guess for the width (sigma) of the lines in Angstroms. Default 1.4 Angstroms", default=1.4, type=float)
     parser.add_argument("-o", "--outdir", nargs='?', help="Name of the output directory", default="voronoi", type=str)
@@ -273,6 +278,7 @@ if __name__ == "__main__":
     outpath = args.outdir
     sigma = args.sigma
     z = args.redshift
+    degree = args.degree
 
     if not os.path.isdir(outpath):
         os.mkdir(outpath)
@@ -342,13 +348,13 @@ if __name__ == "__main__":
     logger.info(f"Total spectra to fit: {total_spectra}")
     start = time.time()
     if cpus>1:
-        results = process_map(partial(fit_spectrum, fit_lines=fit_lines, redshift=z, sigma=sigma, wavelengths=wavelengths, wav_cuts=wav_cuts, linegroups=linegroups), 
+        results = process_map(partial(fit_spectrum, fit_lines=fit_lines, redshift=z, sigma=sigma, wavelengths=wavelengths, linegroups=linegroups, degree=degree), 
                 iter_spe(data_cube, index=True), max_workers=cpus, chunksize=1,
                 unit=" spectra", desc="Fitting spectra", total=total_spectra)
     else:
         results = []
         for spectrum in iter_spe(data_cube, index=True):
-            result = fit_spectrum(spectrum, fit_lines, redshift=z, sigma=sigma, wavelengths=wavelengths, wav_cuts=wav_cuts, linegroups=linegroups)
+            result = fit_spectrum(spectrum, fit_lines, redshift=z, sigma=sigma, wavelengths=wavelengths, linegroups=linegroups, degree=degree)
             results.append(result)
     
     end = time.time()
@@ -356,7 +362,7 @@ if __name__ == "__main__":
     logger.info("Storing results in output maps")
     # the 2D coordinates shape of the cube (index 0 is wavelength axis)
     outshape = data_cube.shape[1:]
-    outmaps = create_out_maps(fit_lines, outshape)
+    outmaps = create_out_maps(fit_lines, outshape, degree=degree)
     # cube for residuals
     #data_cube.crop()
     #residual_cube = data_cube.clone()
@@ -367,6 +373,7 @@ if __name__ == "__main__":
     ndata = []
     xs = []
     ys = []
+    cont_prefix = 'cont'
     
     for fit_data in results:
 
@@ -401,6 +408,13 @@ if __name__ == "__main__":
 
                         if param.stderr is not None:
                             outmaps["%s_e%s" % (line.name, par)][y, x] = param.stderr
+
+            # Store continuum parameters
+            for i in range(degree + 1):
+                param = best_values[f"{cont_prefix}_c{i}"]
+                outmaps["cont_c%d" % i][y, x] = param.value
+                if param.stderr is not None:
+                    outmaps["cont_ec%d" % i][y, x] = param.stderr
             #warnings.warn("Warning: noise computation might be incorrect: see meaning of residuals here https://lmfit.github.io/lmfit-py/model.html#modelresult-attributes")
             #residual_cube[:, y, x] = fit_data['residual'] --> we need to fix not all spectra having same number of pixels
 
@@ -454,6 +468,12 @@ if __name__ == "__main__":
     linegroupout = "_".join([line for group in linegroups for line in group])
     outfile.write(f"{outpath}/redchi_{linegroupout}.fits")
 
+    for i in range(degree + 1):
+        outfile.data = outmaps["cont_c%d" % i]
+        outfile.write(f"{outpath}/cont_c{i}_{linegroupout}.fits")
+        outfile.data = outmaps["cont_ec%d" % i]
+        outfile.write(f"{outpath}/cont_ec{i}_{linegroupout}.fits")
+    
     # residual_cube.write("%s/residual_cube.fits" % outpath)
     np.savetxt(f"{outpath}/fit_results_{linegroupout}.txt",
                np.array([xs, ys, redchis, ndofs, ndata]).T,
