@@ -91,6 +91,7 @@ def plot_bpt_map(image, colormap=ListedColormap(["blue", "green", "pink", "orang
         print(levels)
         cmp = ListedColormap(["black"])
         cs = ax.contour(file_data, levels=levels, alpha=0.95, origin="lower", cmap=cmp, zorder=2, linestyles=[":", "--", "solid"])
+        ctrs.close()
         #ax.clabel(cs, cs.levels, inline=True, fmt="%d", fontsize=20)
 
     if regions is not None:
@@ -124,6 +125,7 @@ def bpt_single(map_1, logy, regs, conts, mplcolormaps, grid_ax=None, ext=0):
     # 0 for composite or LINER
     bpt_data = np.zeros(x_axis_map[ext].data.shape, dtype=float)
     bpt_indexes = np.zeros(x_axis_map[ext].data.shape) # cannot do int as we use np.nan later on
+    x_axis_map.close()
 
     figure, ax = plt.subplots(1)
 
@@ -457,8 +459,8 @@ for i, ratiomap in enumerate(lineratiomaps):
 
     if args.regions is not None:
         for region in args.regions:
-            mu.plot_regions(region, ax, ymap.primary_header)
-            mu.plot_regions(region, grid_im_axes[i], ymap.primary_header)
+            mu.plot_regions(region, ax, ymap.data_header)
+            mu.plot_regions(region, grid_im_axes[i], ymap.data_header)
     img_figure.savefig(outfile.replace(".fits", "image.png"), format="png", bbox_inches="tight", pad_inches=0.4, dpi=200)
     print("Results stored to %s" % outfile)
 grid_figure.savefig("%s/grid_bpts.png" % outdir)
