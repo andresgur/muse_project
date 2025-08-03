@@ -18,6 +18,7 @@ from astroquery.gaia import Gaia
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as u
+from math import cos, pi
 from astropy.table import Column
 import numpy as np
 
@@ -144,14 +145,16 @@ if os.path.isfile(input_cube) and os.path.isfile(hst_image):
     cube.write(outcube)
     del cube
     logger.info("Output successfully stored to %s" % args.outdir)
-    header = fits.open(wlname)[0].header
+    wfile = fits.open(wlname)
+    header = wfile[0].header
     radesyskeyword = "RADECSYS" if "RADECSYS" in header else "RADESYS"
     radecsys = (header[radesyskeyword].lower())
     ra_center = header["RA"]
     dec_center = header["DEC"]
     obs_epoch = Time(header['DATE-OBS'])
     equinox = header['EQUINOX']
-    radius = args.radius  /60./ 180. * np.pi * u.rad
+    wfile.close()
+    radius = args.radius  /60./ 180. * pi * u.rad
     coords = SkyCoord(ra=ra_center, dec=dec_center, unit=("deg", "deg"), frame=radecsys)
     result_table = search_sources(coords, radius, obs_epoch, equinox, args.catalog)
     # sort table by mag and get the five brightests stars
@@ -171,15 +174,22 @@ if os.path.isfile(input_cube) and os.path.isfile(hst_image):
         starcenter = (row["dec"], row["ra"])
         
         imgfit = cube_image.subimage(starcenter, size=2 * FWHM, unit_size="arcsec", unit_center="deg")
-
+        print(f"\nFitting star {row['source_id']} at RA: {row['ra']:.5f} Dec: {row['dec']:.5f}\n")
+        print("MUSE")
         muse_fit = imgfit.gauss_fit(center=starcenter, flux=np.max(imgfit.data), fwhm=FWHM, circular=True,
                                     cont=0, fit_back=True, peak=True, factor=1, weight=True, verbose=True, full_output=False)
         # for the HST we do not need that big of an image
-        imgfit = hst_im.subimage(starcenter, size=2, unit_size="arcsec", unit_center="deg")
+        imgfit = hst_im.subimage(starcenter, size=1.2, unit_size="arcsec", unit_center="deg", minsize=0.1)
+        print("HST")
         hst_fit = imgfit.gauss_fit(center=starcenter, flux=np.max(imgfit.data), fwhm=0.11, circular=True,
                                     cont=0, fit_back=True, peak=True, factor=1, weight=True, verbose=True, full_output=False)
+        if hst_fit.flux<=0 or muse_fit.flux<=0:
+            logger.warning("Star %s either not found or too crowded in one of the images, skipping..." % row["source_id"])
+            continue
         errors = np.abs(muse_fit.center - hst_fit.center) 
-        errra.append(errors[1])
+        mean_dec = (muse_fit.center[0] + hst_fit.center[0]) / 2.0
+        # account for the widening of the error in RA due to the declination (this is valid only for small offsets!)
+        errra.append(abs(errors[1] * cos(mean_dec * np.pi / 180.)))
         errdec.append(errors[0])
         
         # Collect star data for output
