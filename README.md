@@ -29,11 +29,15 @@ deredden_momcheva.py --> Script to deredden flux line maps (based on e.g. [1](ht
 
 deredden_cube.py --> Will correct the entire cube by Galactic extinction
 
-----utils----
-
-cutfromregion.py --> Script to cut images from an input region ds9 file.
-
+## Utils
+Get the peak position and FWHM of a given ds9 region or entire image
+```
+python get_image_peak.py <image> -r ds9regionfile.reg --psf [gaussian, moffat] --ext 1 --circular
+```
+Cut images from an input region ds9 file.
+```
 python cutfromregion.py <image or cube .fits? -r <ds9 region for the cut> -o <outname> (otherwise autonamed as cut+image)
+```
 
 Before             |  After
 :-------------------------:|:-------------------------:
