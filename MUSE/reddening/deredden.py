@@ -2,43 +2,41 @@
 # @Date:   20-05-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 15-06-2021
+# @Last modified time: 22-06-2021
 # Script to compute extinction map
 
 from dust_extinction.parameter_averages import CCM89, O94, F04
 from astropy.io import fits
 import argparse
-import configparser
 import os
 import numpy as np
 import astropy.units as u
 import glob
 
-ap = argparse.ArgumentParser(description='Calculate an extinction map using the extinction curves for a given value of R')
+ap = argparse.ArgumentParser(description='Apply extinction correction from the Balmer decrement map to the line maps.')
 ap.add_argument("-r", "--rootname", nargs='?', help="Root name of the input line files", type=str, default="cleancamel")
 ap.add_argument("-c", "--curve", choices=["cardelli, odonnell, fitzpatrick"], help="Extinction curve to use", default="cardelli")
 ap.add_argument("-R", "--ratio", help="Ratio of total to selective extinction Av/E(B-V)", type=float, default=3.1, nargs="?")
-ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio", type=float, default=2.85, nargs="?")
+ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio", type=float, default=2.86, nargs="?")
 ap.add_argument("-d", "--decrement", help="Ratio between halpha and hbeta flux maps", type=str, required=True, nargs=1)
 args = ap.parse_args()
 halpha = 6563.0 * u.angstrom
 hbeta = 4861.0 * u.angstrom
-
 outdir = "deredden"
 lines = ['OII3727', 'OII3729', 'HBETA', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA']
 
 
 if not os.path.isdir(outdir):
     os.mkdir(outdir)
-# read config file
+# read Rv
 Rv = args.ratio
 # Rv = E(B - V)/Av
 balmer_dec_map = fits.open(args.decrement[0], extname="IMAGE")
 observed_ratios = balmer_dec_map[0].data
-# get E(beta-alpha)
+# get E(beta-halpha)
 color_excess = 2.5 * np.log10(observed_ratios / args.intrinsic)
 color_excess_map = fits.PrimaryHDU(data=color_excess, header=balmer_dec_map[0].header)
-color_excess_map.writeto("%s/color_excess.fits" % outdir, overwrite=True)
+color_excess_map.writeto("%s/decrement_color_excess.fits" % outdir, overwrite=True)
 if args.curve == "cardelli":
     extinction_function = CCM89(Rv)
 elif args.curve == "odonnell":
@@ -46,12 +44,19 @@ elif args.curve == "odonnell":
 elif args.curve == "fitzpatrick":
     extinction_function = F04(Rv)
 
+elif args.curve == "calzetti":
+    extinction_function = C00()
+
 # E(alpha - beta) / A(V)
-curve_color_excess = extinction_function.evaluate(hbeta, Rv) - extinction_function.evaluate(halpha, Rv)
+normalization = Rv
+curve_color_excess = (extinction_function.evaluate(hbeta, Rv) - extinction_function.evaluate(halpha, Rv)) * normalization
+print("Extinction curve at hbeta")
+print(extinction_function.evaluate(hbeta, Rv) * normalization)
+print("Extinction curve at Halpha")
+print(extinction_function.evaluate(halpha, Rv) * normalization)
 Ebv = color_excess / curve_color_excess
-#Ebv = color_excess / color_excess * 0.0940
 color_excess_map = fits.PrimaryHDU(data=Ebv, header=balmer_dec_map[0].header)
-color_excess_map.writeto("%s/total_color_excess.fits" % outdir, overwrite=True)
+color_excess_map.writeto("%s/color_excess_%s_Rv%.1f.fits" % (outdir, args.curve, Rv), overwrite=True)
 print("Color excess map saved to %s/total_color_excess.fits" % outdir)
 print("Mean color excess: %.2f" % np.nanmean(Ebv))
 for line in lines:
@@ -61,7 +66,8 @@ for line in lines:
         continue
     wavemap = wavemap[0]
     fluxmap = glob.glob('./camel_*/cleaned_images/%s_*[!e]flux_*%s.fits' % (args.rootname, line))[0]
-
+    print("Using wavelength map: %s" % wavemap)
+    print("Using flux map: %s" % fluxmap)
     wavelenghts = fits.open(wavemap, extname="IMAGE")[0].data
     fluxes_fits = fits.open(fluxmap, extname="IMAGE")[0]
     fluxes = fluxes_fits.data
@@ -72,7 +78,7 @@ for line in lines:
             if np.isnan(Ebv[x, y]):
                 fluxes[x, y] = np.nan
             else:
-                fluxes[x, y] = fluxes[x, y] / extinction_function.extinguish(wavelenghts[x, y] * u.AA, Ebv=Ebv[x, y])
+                fluxes[x, y] = fluxes[x, y] / extinction_function.extinguish(wavelenghts[x, y] * u.angstrom, Ebv=Ebv[x, y])
     dereddened_fits = fits.PrimaryHDU(data=fluxes, header=header)
     dereddened_fits.header['CURVE'] = "%s" % args.curve
     dereddened_fits.header['R_v'] = "%.1f" % args.ratio

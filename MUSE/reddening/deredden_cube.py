@@ -2,11 +2,9 @@
 # @Date:   20-05-2021
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 10-02-2022
-# Script to compute extinction map
+# @Last modified time: 10-02-2025
 from astropy.io import fits
 import argparse
-import os
 import numpy as np
 from deredden_utils import galactic_extinction, run_get_ebv_script, parse_ebv_output
 from mpdaf.obj import Cube
@@ -47,10 +45,10 @@ wavelengths_3d = cube.wave.coord()[:, np.newaxis, np.newaxis]
 wavelengths_broadcasted = np.broadcast_to(wavelengths_3d, cube.data.shape)
 print("Dereddening... this may take a while...")
 fluxes, efluxes = galactic_extinction(wavelengths_broadcasted, cube.data,
-                                          np.sqrt(cube.var), EBV_gal, EBV_gal_err, Rv=Rv)
+                                          cube.var**0.5, EBV_gal, EBV_gal_err, Rv=Rv)
 
 cube.data = fluxes
-cube.var = efluxes**2
+cube.var = efluxes**2.
 cube.primary_header['CURVE'] = "%s" % curve
 cube.primary_header['R_v'] = "%.2f" % args.ratio
 cube.primary_header['EBV'] = "%.2f$\pm$%.4f" % (EBV_gal, EBV_gal_err)

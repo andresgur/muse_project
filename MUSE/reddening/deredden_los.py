@@ -1,13 +1,12 @@
 # @Author: Andrés Gúrpide <agurpide>
-# @Date:   20-05-2021
+# @Date:   20-05-2022
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 10-02-2022
-# Script to compute extinction map
+# @Last modified time: 10-06-2025
+# Script to correct flux maps from extinction
 from astropy.io import fits
 import argparse
 import os
-import numpy as np
 import glob
 import errno
 from deredden_utils import galactic_extinction, run_get_ebv_script, parse_ebv_output
@@ -90,9 +89,13 @@ for line in lines:
     dereddened_fits.append(fits.ImageHDU(data=fluxes, header=fluxes_fits.header,
                            name="DATA"))
     # we save the variance
-    dereddened_fits.append(fits.ImageHDU(data=efluxes**2, header=efluxes_fits.header,
+    dereddened_fits.append(fits.ImageHDU(data=efluxes**2., header=efluxes_fits.header,
                            name="STAT"))
     outfile = fluxmap.replace(".fits", "_deredden.fits")
     dereddened_fits.writeto(outfile, overwrite=True)
+
+    fluxes_fits.close()
+    efluxes_fits.close()
+    wavelenghts_fits.close()
 
     print("Dereddened flux map for line %s and stored it to %s" % (line, outfile))

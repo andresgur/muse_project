@@ -2,6 +2,7 @@ from extinction import ccm89, remove
 import re
 import subprocess
 import numpy as np
+from math import log
 import astropy.units as u
 import os
 
@@ -20,13 +21,21 @@ def galactic_extinction(wavelengths, fluxes, efluxes, EBV_gal, EBV_gal_err=0, Rv
         Error on EBV_gal
     Rv: float,
         3.1 by Default
+
+    Returns
+    -------
+    deredden_fluxes: array-like
+        Same shape as fluxes
+    varredden_fluxes: array-like
+        The propagated error of the dereddened fluxes (i.e. sqrt(variance)
     """
     Av = EBV_gal * Rv
     Av_gal_err = EBV_gal_err * Rv
     wavs = np.array(wavelengths.flatten(), dtype="double")
     mag_ext = ccm89(wavs, Av, Rv, unit="aa")
-    deredden_fluxes = remove(mag_ext, fluxes.flatten())
-    ederedden_fluxes = np.sqrt(remove(mag_ext, efluxes.flatten())**2 + (Av_gal_err * fluxes.flatten() * np.log(10) * 0.4)**2)
+    flattened_fluxes = fluxes.flatten()
+    deredden_fluxes = remove(mag_ext, flattened_fluxes)
+    ederedden_fluxes = (remove(mag_ext, efluxes.flatten())**2 + (Av_gal_err * flattened_fluxes * log(10) * 0.4)**2) **0.5
     return deredden_fluxes.reshape(wavelengths.shape), ederedden_fluxes.reshape(wavelengths.shape)
 
 
@@ -51,8 +60,8 @@ def run_get_ebv_script(ra, dec):
 def parse_ebv_output(output):
     """Parses the output of get_ebv.sh"""
     # Regular expressions to capture the mean and std values
-    mean_pattern = re.compile(r"E\(B-V\) mean \(Schlafly & Finkbeiner 2011\) over \d+ arcminutes: ([0-9.]+) mag")
-    std_pattern = re.compile(r"E\(B-V\) std \(Schlafly & Finkbeiner 2011\) over \d+ arcminutes: ([0-9.]+) mag")
+    mean_pattern = re.compile(r"E\(B-V\) mean \(Schlafly & Finkbeiner 2011\) over \d+ degrees: ([0-9.]+) mag")
+    std_pattern = re.compile(r"E\(B-V\) std \(Schlafly & Finkbeiner 2011\) over \d+ degrees: ([0-9.]+) mag")
 
     mean_match = mean_pattern.search(output)
     std_match = std_pattern.search(output)
@@ -75,13 +84,17 @@ class C00:
     def evaluate(self, wavelength):
         """wavelength must be in wavelength units"""
         micron = wavelength.to(u.micron).value
+        micron = np.asarray(micron)
+        if micron.ndim == 0:
+            micron = micron[None]
         x = 1 / micron
         optical_indx = np.where(np.logical_and(0.63 <= micron, micron <= 2.20))
         ir_indx = np.where(np.logical_and(0.12 <= micron, micron <= 0.63))
-        x = np.asarray(x)
-        if x.ndim == 0:
-            x = x[None]
-        k = np.empty(len(x))
-        k[optical_indx] = 2.659 * (-1.857 + 1.040 * x) + self.Rv
-        k[ir_indx] = 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + self.Rv
+        k = np.empty(len(micron))
+        k[optical_indx] = 2.659 * (-1.857 + 1.040 * x[optical_indx]) + self.Rv
+        k[ir_indx] = 2.659 * (-2.156 + 1.509 * x[ir_indx] - 0.198 * x[ir_indx]**2 + 0.011 * x[ir_indx]**3) + self.Rv
+        
+        # If input was scalar, return scalar
+        if wavelength.to(u.micron).value.ndim == 0:
+            return k[0]
         return k
