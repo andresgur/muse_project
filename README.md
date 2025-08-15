@@ -25,10 +25,14 @@ Where numeratos and denominators are a space-separed list of fits files. The fil
 ## Reddening
 deredden.py --> Script to deredden flux line maps, it needs as input the balmer decrement map (Halpha/Hbeta) and it will automatically localize the flux maps
 
-deredden_momcheva.py --> Script to deredden flux line maps (based on e.g. [1](http://arxiv.org/abs/1207.5479) see the Appendix), it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them (python deredden_momcheva.py -a halpha_path -b hbeta_path -Rv 4.05 -i 2.86). It creates a map of E(B-V) and one with the uncertainty on E(B-V)
-
-deredden_cube.py --> Will correct the entire cube by Galactic extinction
-
+deredden_momcheva.py --> Script to deredden flux line maps (based on e.g. [Momcheva et al. 2013](https://iopscience.iop.org/article/10.1088/0004-6256/145/2/47) see the Appendix), it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them.
+```
+python deredden_momcheva.py -a halpha_path -b hbeta_path -Rv 4.05 -i 2.86). It creates a map of E(B-V) and one with the uncertainty on E(B-V)
+```
+Correct cube from Galactic extinction (both Rv and EBV are optional. If not given EBV is taken from the [Schlafly & Finkbeiner 2011](https://ui.adsabs.harvard.edu/abs/2011ApJ...737..103S/abstract) EBV map using the cube coordinates.
+```
+python deredden_cube.py cube  -R Rv --ebv_gal EBV EBV_err
+```
 ## Utils
 Get the peak position and FWHM of a given ds9 region or entire image
 ```
