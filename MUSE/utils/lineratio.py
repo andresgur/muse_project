@@ -2,14 +2,12 @@
 # @Date:   03-09-2019
 # @Email:  agurpidelash@irap.omp.eu
 # @Last modified by:   agurpide
-# @Last modified time: 03-08-2021
+# @Last modified time: 03-08-2024
 # Script to create line map ratios out of two line map images fits file
 
 # imports
 import argparse
 import os
-import sys
-import numpy as np
 import warnings
 from astropy.io import fits
 
@@ -24,7 +22,7 @@ def var_division(a, b, a_err, b_err):
     b_err: error on the denominator (or array)
     """
 
-    return (a_err / b) ** 2 + (a * b_err / b ** 2) ** 2
+    return (a_err / b) ** 2. + (a * b_err / b ** 2.) ** 2.
 
 
 def add_maps_quadrature(linemaps):
@@ -54,7 +52,7 @@ def add_maps_quadrature(linemaps):
             warnings.warn("Line map %s not found." % linemap)
             continue
 
-    return np.sqrt(added_data), added_maps_log
+    return (added_data)**0.5, added_maps_log
 
 
 def add_maps(linemaps):
@@ -81,6 +79,7 @@ def add_maps(linemaps):
                 added_data = linemapfits[extension].data
             else:
                 added_data += linemapfits[extension].data
+            linemapfits.close()
         else:
             warnings.warn("Line map %s not found." % linemap)
             continue
@@ -151,6 +150,7 @@ ratio_fits[1].header['COMMENT'] = "Ratio of %s/%s line maps" % (added_maps_numer
 if args.enumerators is not None and args.edenominator is not None:
     err_numerator, added_maps_numerator = add_maps_quadrature(elinemaps_numerator)
     err_denominator, added_maps_denominator = add_maps_quadrature(elinemaps_denominator)
+    # calculate variance on the ratio (i.e. std***2)
     err_ratio = var_division(numerator_data, denominator_data, err_numerator, err_denominator)
     err_image = fits.ImageHDU(data=err_ratio, header=header, name="STAT")
     err_image.header['COMMENT'] = "Ratio of %s/%s line maps" % (added_maps_numerator, added_maps_denominator)
