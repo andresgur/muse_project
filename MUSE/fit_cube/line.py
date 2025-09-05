@@ -44,12 +44,12 @@ class Lines:
         self.append(Line('HBETA', 4861.32, label=rf'H$\beta$'))
         self.append(Line('OIII4959', 4958.911, label=fr'[O III]$\lambda$4959')) # theoreitical is 3.04 (OIII5007/OIII4959 = 3.04) so we use the inverse ratio
         self.append(Line('OIII5007', 5006.843, ref='OIII4959', low=2.5, up=3.5, th=2.94, label=r'[O III]$\lambda$5007'))
-        self.append(Line("HeI5875", 5875, label=rf"[He I]$\lambda$5875"))
         self.append(Line("NII5755", 5754.8, label=rf"[N II]$\lambda$5755"))
+        self.append(Line("HeI5875", 5875, label=rf"[He I]$\lambda$5875"))
         self.append(Line('OI6300_sky', 6300.3, label=rf"[O I]$\lambda$6300"))
-        self.append(Line("OI6363_sky", 6363.78, ref="OI6300_sky", low=0.103, up=0.7, th=0.3289)) # theoreitical is 3.04 (OI6300/OI6363 = 3.04) so we use the inverse ratio
         self.append(Line('OI6300', 6300.3, label=rf"[O I]$\lambda$6300"))
         self.append(Line("SIII6312", 6312.06, label=rf"[S III]$\lambda$6312"))
+        self.append(Line("OI6363_sky", 6363.78, ref="OI6300_sky", low=0.103, up=0.7, th=0.3289)) # theoreitical is 3.04 (OI6300/OI6363 = 3.04) so we use the inverse ratio
         self.append(Line("OI6363", 6363.78, ref="OI6300", low=0.25, up=0.5, th=0.3289, label=rf"[O I]$\lambda$6363")) # theoreitical is 3.04 (OI6300/OI6363 = 3.04) so we use the inverse ratio
         self.append(Line('NII6548', 6548.05, label=rf"[N II]$\lambda$6548"))
         self.append(Line('HALPHA', 6563, label=rf"H$\alpha$")) # ref='HBETA', low=2.65, th=2.85, up=6))
@@ -61,5 +61,4 @@ class Lines:
         self.append(Line('SII6731', 6730.82, ref='SII6716', low=0.65, up=3, th=1.)) # this is from 1.53 to 0.33 (see Osterbroks & Ferland 2006, p. 123)
         self.append(Line("HeI7065", 7065.18, label=rf"He I$\lambda$7065"))
         self.append(Line("ArIII7135", 7135.79, label=rf"[Ar III]$\lambda$7135"))
-        self.append(Line("[O III]$\lambda$7135", 7135.79, label=rf"[O III]$\lambda$7135"))
         self.append(Line("SIII9069", 9069.27, label=rf"[S III]$\lambda$9069"))
