@@ -3,13 +3,14 @@
 import numpy as np
 import argparse, os, logging
 from line import Lines
-from lineutils import get_instrument_FWHM, peculiar_velocity, sigma_to_fwhm, ckms
-from fitutils import fit_spectrum, DofError, SpectrumMaskedError, plot_fit
+from lineutils import get_instrument_FWHM, compute_shift, ckms, correct_FWHM
+from fitutils import fit_spectrum, DofError, SpectrumMaskedError, plot_fit, get_error
 from mpdaf.obj import Spectrum
 import numpy.ma as ma
 from lmfit.model import save_model
 from lmfit.printfuncs import ci_report
 from math import pi
+import matplotlib.pyplot as plt
 
 
 logger = logging.getLogger('fit_spectrum')
@@ -123,6 +124,8 @@ if __name__ == "__main__":
     # cut the cube over the wavelength range we will not needed
     data_spectrum.mask_region(waveinit - step *1.01, waveend + step * 1.01, inside=False)
     data_spectrum.crop()
+    if np.all(data_spectrum.mask):
+        raise SpectrumMaskedError("Spectrum is completely masked! Check the input spectrum, try different lines or wavelenght cuts")
 
     # mask the data spectrum outside the wavelength range of interest, important to copy here
     original_mask = data_spectrum.data.mask.copy()  
@@ -142,14 +145,19 @@ if __name__ == "__main__":
     logger.info(f"Fitting spectrum {specname} with {len(fit_lines)} lines,  {len(linegroups)} line groups")
     
     try:
-        result, conf = fit_spectrum(data_spectrum, fit_lines, redshift=redshift, sigma=sigma, wavelengths=wavelengths, degree=degree, uncertainties=True)
+        result, conf = fit_spectrum(data_spectrum, fit_lines, redshift=redshift, sigma=sigma, 
+                                    wavelengths=wavelengths, degree=degree, uncertainties=True)
     except (SpectrumMaskedError, DofError) as e:
         logger.error(f"Fitting failed: {e}")
         exit(1)
     save_model(result, f"{outpath}/{linegroupout}_model.sav")
     print(result.fit_report())
-    print(ci_report(conf, ndigits=3))
-    fig = plot_fit(wavelengths[~data_spectrum.mask], result, lref=fit_lines[line].wave, annotate=False, z_sys=redshift, normalize=False)
+    if conf is not None:
+        print(ci_report(conf, ndigits=3))
+    if len(fit_lines)==1:
+        fig = plot_fit(wavelengths[~data_spectrum.mask], result, lref=fit_lines[line].wave, z_sys=redshift, annotate=False, normalize=True)
+    else:
+        fig = plot_fit(wavelengths[~data_spectrum.mask], result, z_sys=redshift, annotate=False, normalize=True)
 
     fig.savefig(f"{outpath}/{linegroupout}_fit")
 
@@ -185,7 +193,7 @@ if __name__ == "__main__":
         param_values.append(snr)
         
         # Store basic line parameters
-        linepars = ["amplitude", "fwhm", "center"]
+        linepars = ["amplitude", "vel", "fwhm_vel"]
         for par in linepars:
             param_name = "%s_%s" % (linename, par)
             if param_name in best_values:
@@ -198,69 +206,62 @@ if __name__ == "__main__":
                 # Parameter uncertainty
                 error_value = np.nan
                 if conf is not None:
-                    # Handle FWHM specially (stored as sigma)
-                    if par == "fwhm":
-                        parname = "%s_sigma" % linename
-                        if parname in conf:
-                            confpar = conf[parname]
-                            error_value = (confpar[1][1] - confpar[0][1]) * sigma_to_fwhm
-                        # if it was a broad line
-                        elif "broad" in linename:
-                            confpar = conf["%s_sigma_factor" %linename]
-                            # multiply sigma of the narrow line with the factor
-                            print(confpar[0][1], confpar[1][1])
-                            error_value = (confpar[1][1] - confpar[0][1]) * best_values["%s_fwhm" % linename.replace("_broad", "")]
-                        
-                        # store for later
-                        fwhm_value = param.value
-                        efwhm_value = error_value
+                    # handle the broad factor
+                    if par == "fwhm_vel" and "broad" in linename:
+                        confpar = conf["%s_fwhm_factor" %linename]
+                        # multiply sigma of the narrow line with the factor
+                        error_value = get_error(confpar) * best_values["%s_%s" % (linename.replace("_broad", ""), par)]
+                    
                     elif param_name in conf:
                         confpar = conf[param_name]
-                        error_value = confpar[1][1] - confpar[0][1]
+                        error_value = get_error(confpar)
 
                 elif param.stderr is not None:
                     error_value = param.stderr
-                if par=="center":
-                    # store for later
-                    wavelength = param.value
-                    ewavelength = error_value
+
                 param_names.append(f"{param_name}_err")
                 param_values.append(error_value)
+
+                if par=="vel":
+                    # store for later
+                    velocity = param.value
+                    evelocity = error_value
+                    wavelength, ewavelength = compute_shift(line.wave, z_sys=redshift, velocity=velocity, evelocity=evelocity)
+                    param_names.append(f"{linename}_center")
+                    param_values.append(wavelength)
+                
+                    param_names.append(f"{linename}_center_err")
+                    param_values.append(ewavelength)
 
                 if par=="amplitude" and args.distance is not None:
                     param_names.append("%s_lum" % linename)
                     param_values.append(param.value * 4 * pi * D**2)
                     param_names.append("%s_lum_err" % linename)
                     param_values.append(error_value * 4 * pi * D**2)
-        
-        # FWHM corrected and FWHM velocity
-        FWHM_inst, eFWHM_inst = get_instrument_FWHM(wavelength, ewavelength)
-        if fwhm_value > FWHM_inst:
-            fwhm_corrected = np.sqrt(fwhm_value**2 - FWHM_inst**2)
-            efwhm_corrected = np.sqrt((fwhm_value * efwhm_value)**2 + (FWHM_inst * eFWHM_inst)**2) / fwhm_corrected
-            fwhm_vel = fwhm_corrected / wavelength * ckms
-            efwhm_vel = np.sqrt(efwhm_corrected**2 + (fwhm_corrected * ewavelength / wavelength)**2) * ckms / wavelength
-        # unresolved line
-        else:
-            fwhm_corrected = 0
-            efwhm_corrected = np.nan
-            fwhm_vel = 0
-            efwhm_vel = np.nan
 
+                if par == "fwhm_vel":
+                    # FWHM corrected and FWHM velocity
+                    FWHM_inst, eFWHM_inst = get_instrument_FWHM(wavelength, ewavelength)
+                    FWHM_instvel = FWHM_inst / wavelength * ckms
+                    if param.value > FWHM_instvel:
+                        eFWHM_instvel =  ((eFWHM_inst / wavelength)**2. + (FWHM_inst * ewavelength / wavelength**2))**0.5 * ckms
+                        fwhm_vel_corrected, efwhm_vel_corrected = correct_FWHM(param.value, FWHM_instvel, error_value, eFWHM_instvel)
 
-        param_names.extend([f"{linename}_fwhm_corrected", f"{linename}_fwhm_corrected_err", f"{linename}_fwhm_vel", f"{linename}_fwhm_vel_err"])
-        param_values.extend([fwhm_corrected, efwhm_corrected, fwhm_vel, efwhm_vel])
-
-        # Velocity
-        if "sky" in linename:
-            z_sys = 0.0
-        else:
-            z_sys = redshift
-        velocity, evelocity = peculiar_velocity(line.wave, wavelength, 
-                                              ewavelength=ewavelength, z_sys=z_sys)
-        
-        param_names.extend([f"{linename}_vel", f"{linename}_vel_err"])
-        param_values.extend([velocity, evelocity])
+                        # f = A**2 - B **2
+                        # df/dA = 2A
+                        # df/dB = -2B
+                        # df = sqrt( (df/da dA)**2 + (-2B dB)**2)
+                        # df = sqrt( (2A dA)**2 + (2B dB)**2) = 2 sqrt(A dA + B dB)
+                        # F = sqrt(f) = sqrt(A**2 - B**2)
+                        # d sqrt(f) = 1/(2 * sqrt(f))  * df = 1 / (2 F) * df =   sqrt( (A dA)**2 + (B dB)**2) / F
+                    else:
+                        fwhm_vel_corrected = 0
+                        efwhm_vel_corrected = np.nan
+                    
+                    param_names.append(f"{linename}_fwhm_vel_corr")
+                    param_values.append(fwhm_vel_corrected)
+                    param_names.append(f"{linename}_fwhm_vel_corr_err")
+                    param_values.append(efwhm_vel_corrected)
 
         previouslinename = linename
     
@@ -274,7 +275,7 @@ if __name__ == "__main__":
         error_value = np.nan
         if conf is not None and f"{cont_prefix}_c{i}" in conf:
             confpar = conf[f"{cont_prefix}_c{i}"]
-            error_value = np.abs(confpar[0][1] - confpar[1][1])
+            error_value = get_error(confpar)
         elif param.stderr is not None:
             error_value = param.stderr
         
