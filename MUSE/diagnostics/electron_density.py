@@ -86,7 +86,7 @@ def calculate_electron_density(sii_ratio_map, T, ext=1, siii_ratio_map=None):
 
         # Solve for Te and Ne
         # be careful here cause the diganostic in pyneb is defined the other way around, so we need to invert the SII ratio
-        tem_flat_results, ne_flat_results = diags.getCrossTemDen(diag_den='[SII] 6731/6716', diag_tem='[SIII] 6312/9069', start_den=0.5, end_den=5000,
+        tem_flat_results, ne_flat_results = diags.getCrossTemDen(diag_den='[SII] 6731/6716', diag_tem='[SIII] 6312/9069', start_den=0.5,
                                                                  value_tem=siii_flat, value_den=1 / s2_flat)
         
         # Map results back to 2D arrays
