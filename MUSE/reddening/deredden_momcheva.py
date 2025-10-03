@@ -56,7 +56,7 @@ hbeta = 4861.0 * u.angstrom
 
 outdir = "deredden_momcheva"
 #'OII3727', 'OII3729',
-lines = ['HBETA', 'OI6300', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA', "HeII4686", "HeI5875", "HeI6678", "HeI7065", "ArIII7135", "SIII9069"]
+lines = ['HBETA', 'OI6300', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA', "HeII4686", "SIII9069", "SIII6312"] # "HeI5875", "HeI6678", "HeI7065", "ArIII7135", 
 fluxkeyword = "amplitude" # could be "flux"
 wavelengthkeyword = "center" # wave
 
@@ -150,9 +150,15 @@ if len(halpha_efile) > 0:
     # I thought the above was incorrect, but comparing two different calculations I get exactly same results
     ecolor_excess_map = fits.PrimaryHDU(data=err_ebv, header=halpha_map[ext].header)
     ecolor_excess_map.writeto("%s/ecolor_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
+
+    hbeta_emap.close()
+    halpha_emap.close()
 else:
     uncertainties = 0
     print("Warning; halpha error file not found. Uncertainties won't be computed")
+
+halpha_map.close()
+hbeta_map.close()
 
 for line in lines:
     print("\tDereddening %s line" % line)
@@ -163,8 +169,8 @@ for line in lines:
         continue
     wavemap = wavemap[0]
 
-    fluxmap = glob.glob(f'{lines_path}/{args.rootname}_{line}*[!e]{fluxkeyword}.fits')[0]
-    efluxmap = glob.glob(f'{lines_path}/{args.rootname}_{line}*e{fluxkeyword}.fits')[0]
+    fluxmap = glob.glob(f'{lines_path}/{args.rootname}_{line}_{fluxkeyword}.fits')[0]
+    efluxmap = glob.glob(f'{lines_path}/{args.rootname}_{line}_e{fluxkeyword}.fits')[0]
     print("Using wavelength map: %s" % wavemap)
     print("Using flux map: %s" % fluxmap)
     print("Using eflux map: %s" % efluxmap)
@@ -173,8 +179,10 @@ for line in lines:
     if wavelenghts_fits[ext].data is None:
         ext = 1
     wavelenghts = wavelenghts_fits[ext].data
-    fluxes_fits = fits.open(fluxmap, extname="IMAGE")[ext]
-    efluxes_fits = fits.open(efluxmap, extname="IMAGE")[ext]
+    flux_hdul = fits.open(fluxmap, extname="IMAGE")
+    fluxes_fits = flux_hdul[ext]
+    eflux_hdul = fits.open(efluxmap, extname="IMAGE")
+    efluxes_fits = eflux_hdul[ext]
     fluxes = fluxes_fits.data
     efluxes = efluxes_fits.data
     # deredden fluxes
@@ -209,6 +217,10 @@ for line in lines:
 
     outfile = os.path.basename(fluxmap).replace(".fits", "_deredden.fits")
     dereddened_fits.writeto(f"{outdir}/{outfile}", overwrite=True)
+    dereddened_fits.close()
+    flux_hdul.close()
+    eflux_hdul.close()
+    wavelenghts_fits.close()
     #edereddened_fits = fits.PrimaryHDU(data=efluxes, header=efluxes_fits.header)
     #edereddened_fits.header['CURVE'] = "%s" % curve
     #edereddened_fits.header['R_v'] = "%.2f" % args.ratio
@@ -220,4 +232,5 @@ for line in lines:
     python_argument = "%s -R %.1f -i %.3f -a %s -b %s" % (__file__, Rv, args.intrinsic, args.halpha[0], args.hbeta[0])
     with open("%s/python_command.txt" % outdir, "w+") as f:
         f.write(python_argument)
+
     print("Dereddened flux map for line %s and stored it to %s" % (line, outfile))
