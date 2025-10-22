@@ -5,7 +5,7 @@ import argparse, os, time, logging
 from line import Lines
 from lineutils import get_instrument_FWHM, compute_shift, correct_FWHM
 from fitutils import fit_spectrum, SpectrumMaskedError, DofError, get_error
-from mpdaf.obj import Cube, iter_spe
+from mpdaf.obj import Cube, Image, iter_spe
 import warnings
 import numpy.ma as ma
 import matplotlib.pyplot as plt
@@ -33,6 +33,15 @@ CATALOG_LINES = Lines()
 ckms = 299792.458
 sigma_to_fwhm = 2.355  # FWHM = 2.355 * sigma
 sqrt2pi = (2. * np.pi) ** 0.5
+
+def save_image(data, templatefile, dtype=float, degree=1, redshift=0.0, margin=25, filename="output.fits", bunit=""):
+    outfile = Image(data=data, wcs=templatefile.wcs, dtype=dtype, unit=bunit)
+    outfile.primary_header = templatefile.primary_header
+    outfile.primary_header["DEGREE"] = degree
+    outfile.primary_header["REDSHIFT"] = redshift
+    outfile.primary_header["WINDOW"] = margin
+    outfile.data_header["OBJECT"] = templatefile.data_header.get("OBJECT", "Unknown")
+    outfile.write(filename)
 
 def create_out_maps(lines, shape, degree=1):
     """Create output maps
@@ -354,33 +363,34 @@ if __name__ == "__main__":
 
     linepars = ["amplitude", "fwhm_vel", "vel", "snr"]
     # dummy skeleton for the output cube
-    outfile = data_cube[0 ,: , :]
-    outfile.primary_header["DEGREE"] = degree
-    outfile.primary_header["REDSHIFT"] = redshift
-    outfile.primary_header["WINDOW"] = margin
+    templatefile = data_cube[0 ,: , :]
     for line in fit_lines.values():
+        
         linename = line.name
         # store line param values
         for par in linepars:
             # parameter value
-            outfile.data = outmaps["%s_%s" % (linename, par)]
-            outfile.write("%s/%s_%s.fits" % (outpath, linename, par))
+            save_image(data=outmaps["%s_%s" % (linename, par)], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/%s_%s.fits" % (outpath, linename, par))
             # parameter uncertainty
             if par=="snr":
                 # do not store the uncertainty for SNR
                 continue
-            outfile.data = outmaps["%s_e%s" % (line.name, par)]
-            outfile.write("%s/%s_e%s.fits" % (outpath, line.name, par))
+            save_image(data=outmaps["%s_e%s" % (linename, par)], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/%s_e%s.fits" % (outpath, linename, par))
 
         # store wavelenght
         wavelength, ewavelength = compute_shift(line.wave, z_sys=redshift, velocity=outmaps["%s_%s" % (linename, "vel")], 
                                                                     evelocity=outmaps["%s_e%s" % (linename, "vel")])
 
         par = "center"
-        outfile.data = wavelength.copy()
-        outfile.write(f"{outpath}/{linename}_{par}.fits")
-        outfile.data = ewavelength.copy()
-        outfile.write(f"{outpath}/{linename}_e{par}.fits")
+        save_image(data=wavelength, templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename=f"{outpath}/{linename}_{par}.fits", bunit="Angstrom")
+
+        #ecenter
+        save_image(data=ewavelength, templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename=f"{outpath}/{linename}_e{par}.fits", bunit="Angstrom")
+
         # FWHM
         FWHM_o = outmaps["%s_fwhm_vel" % (linename)]
         eFWHM_o = outmaps["%s_efwhm_vel" % (linename)]
@@ -397,25 +407,26 @@ if __name__ == "__main__":
         outmaps[f"{linename}_{par}"][valid_selector] = FWHM_corrected
         outmaps[f"{linename}_{par}"][~valid_selector] = 0
         # store FWHM corrected maps
-        outfile.data = outmaps[f"{linename}_{par}"].copy()
-        outfile.write("%s/%s_%s.fits" % (outpath, linename, par))
+        save_image(data=outmaps[f"{linename}_{par}"], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/%s_%s.fits" % (outpath, linename, par), bunit="km/s")
 
         outmaps[f"{linename}_e{par}"][valid_selector] = eFWHM_corrected # the non valid valus are simply nan
-        outfile.data = outmaps[f"{linename}_e{par}"].copy()
-        outfile.write("%s/%s_e%s.fits" % (outpath, linename, par))
+        save_image(data=outmaps[f"{linename}_e{par}"], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/%s_e%s.fits" % (outpath, linename, par), bunit="km/s")
 
     for fitstat in ["redchi", "rsquared", "BIC"]:
         # write the reduced chi square and r squared maps
-        outfile.data = outmaps[fitstat]
-        outfile.write(f"{outpath}/{fitstat}_{linegroupout}.fits")
+        save_image(data=outmaps[fitstat], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/%s_%s.fits" % (outpath, fitstat, linegroupout))
         
 
     for i in range(degree + 1):
-        outfile.data = outmaps["cont_c%d" % i]
-        outfile.write(f"{outpath}/cont_c{i}_{linegroupout}.fits")
+        bunit = templatefile.unit if i ==0 else f"{templatefile.unit}/Angstrom^{i}"
+        save_image(outmaps["cont_c%d" % i], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/cont_c%d_%s.fits" % (outpath, i, linegroupout), bunit=bunit)
+        save_image(outmaps["cont_ec%d" % i], templatefile=templatefile, degree=degree, redshift=redshift, margin=margin,
+                         filename="%s/cont_ec%d_%s.fits" % (outpath, i, linegroupout), bunit=bunit)
 
-        outfile.data = outmaps["cont_ec%d" % i]
-        outfile.write(f"{outpath}/cont_ec{i}_{linegroupout}.fits")
 
     # residual_cube.write("%s/residual_cube.fits" % outpath)
     np.savetxt(f"{outpath}/fit_results_{linegroupout}.txt",
