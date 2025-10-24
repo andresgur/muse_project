@@ -42,7 +42,7 @@ lines_path = "."
 # lines_path = "./camel_*/cleaned_images/"
 #
 
-ap = argparse.ArgumentParser(description='Applies extinction correction to a set of maps given an input HALPH and HBETA map. It uses the Cardelli extinction curve + the Calzetti extinction curve for extragalactic extinction')
+ap = argparse.ArgumentParser(description='Applies extinction correction to a set of maps given an input HALPH and HBETA map. It uses the Cardelli extinction curve + the Calzetti extinction curve for extragalactic extinction. Stores the variances in the [STAT] extension of the output fits files.')
 ap.add_argument("-r", "--rootname", nargs='?', help="Root name of the input line files", type=str, default="clean_camel")
 ap.add_argument("-R", "--ratio", help="Ratio of total to selective extinction Av/E(B-V). Default Rv=4.05 from Calzetti", type=float, default=4.05, nargs="?")
 ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio. Default 2.86", type=float, default=2.86, nargs="?")
@@ -54,7 +54,7 @@ args = ap.parse_args()
 halpha = 6563.0 * u.angstrom
 hbeta = 4861.0 * u.angstrom
 
-outdir = "deredden_momcheva"
+outdir = "deredden"
 #'OII3727', 'OII3729',
 lines = ['HBETA', 'OI6300', 'NII6548', 'NII6583', 'SII6716', 'SII6731', 'OIII4959', 'OIII5007', 'HALPHA', "HeII4686", "SIII9069", "SIII6312"] # "HeI5875", "HeI6678", "HeI7065", "ArIII7135", 
 fluxkeyword = "amplitude" # could be "flux"
@@ -121,6 +121,7 @@ print(kalpha)
 print("k(beta) - k(halpha)")
 print(curve_color_excess)
 Ebv = color_excess / curve_color_excess
+
 # we assume if EBV is negative that there's no extinction
 Ebv[Ebv < 0] = 0
 color_excess_map = fits.PrimaryHDU(data=Ebv, header=halpha_map[0].header)
@@ -147,6 +148,7 @@ if len(halpha_efile) > 0:
                                                                       EBV_gal[0], EBV_gal[1], Rv_CARDELLI)
 
     err_ebv = 2.5 * np.sqrt((np.log10(np.e) * (halpha_emap[ext].data / halpha_map[ext].data)) ** 2 + (np.log10(np.e) * hbeta_emap[ext].data / hbeta_map[ext].data)**2) / curve_color_excess
+    
     # I thought the above was incorrect, but comparing two different calculations I get exactly same results
     ecolor_excess_map = fits.PrimaryHDU(data=err_ebv, header=halpha_map[ext].header)
     ecolor_excess_map.writeto("%s/ecolor_excess_%s_Rv%.1f_i%.2f.fits" % (outdir, curve, Rv, args.intrinsic), overwrite=True)
@@ -188,32 +190,36 @@ for line in lines:
     # deredden fluxes
     fluxes, efluxes = galactic_extinction(wavelenghts, fluxes, efluxes, EBV_gal[0],
                                           EBV_gal[1], Rv=Rv_CARDELLI)
-    for x in range(wavelenghts.shape[0]):  # loop on the x range
-        for y in range(wavelenghts.shape[1]):  # loop on the y range
-            if np.isnan(Ebv[x, y]):
-                # if EBV is nan we assume no extinction
-                continue
-                #fluxes[x, y] = np.nan
-                #efluxes[x, y] = np.nan
-            else:
-                extinction_curve_value = extincton_curve.evaluate(wavelenghts[x, y] * u.angstrom)
-                fluxes[x, y] = fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])
-                if uncertainties:
-                    efluxes[x, y] = np.sqrt((efluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y])) ** 2 \
-                    + (err_ebv[x, y] * fluxes[x, y] * 10 ** (0.4 * extinction_curve_value * Ebv[x, y]) * np.log(10**(0.4 * extinction_curve_value)))**2)
+    extinction_curve_values = extincton_curve.evaluate(wavelenghts.flatten() * u.angstrom).reshape(wavelenghts.shape)
+    print("For non-detected Hb, we assume line of sight extinction only")   
+    correctedfluxes = np.where(np.isnan(Ebv), fluxes, fluxes * 10 ** (0.4 * extinction_curve_values * Ebv))
+    # Compute the corrected fluxes
+    if uncertainties:
+        # ----------------------------------------------------------------------
+        # Derivatives used for uncertainty propagation:
+        # 
+        # F_corr = F_obs * 10**(0.4 * E(B-V) * k)
+        #
+        # dF_corr/dF_obs x sigma_Fcorr = 10**(0.4 * E(B-V) * k) x sigma_Fcorr
+        # dF_corr/dE(B-V) = F_obs * 10**(0.4 * E(B-V) * k) * (ln(10**0.4 * k)) x sigma_EBV
+        #                 = F_corr * (ln(10**0.4 * k)) x sigma_EBV = F_corr * (0.4 * k * ln(10)) x sigma_EBV
+        # ----------------------------------------------------------------------
+        ecorrectedfluxes = np.where(np.isnan(Ebv), efluxes, ( (efluxes * 10 ** (0.4 * extinction_curve_values * Ebv)) ** 2 \
+                    + (err_ebv * correctedfluxes * 0.4 * extinction_curve_values * np.log(10) )**2)**0.5 )
     dereddened_fits = fits.HDUList(fits.PrimaryHDU(header=fluxes_fits.header))
-    dereddened_fits.append(fits.PrimaryHDU(data=fluxes, header=fluxes_fits.header))
+    dereddened_fits.append(fits.PrimaryHDU(data=correctedfluxes, header=fluxes_fits.header))
     dereddened_fits[0].header["EXTNAME"] = 'DATA'
-    dereddened_fits[0].header["ERRDATA"] = 'STAT'
     dereddened_fits[0].header['CURVE'] = "%s" % curve
     dereddened_fits[0].header['R_v'] = "%.2f" % args.ratio
     dereddened_fits[0].header['R_v_gal'] = "%.2f" % Rv_CARDELLI
     dereddened_fits[0].header['EBV_gal'] = "%.3f$\pm$%.4f" % (EBV_gal[0], EBV_gal[1])
     dereddened_fits[0].header['COMMENT'] = "Balmer ratio files: %s/%s" % (halpha_file, hbeta_file)
-    dereddened_fits[0].header['COMMENT'] = "The STAT contains the variance (if uncertainties were calculated)"
     # we save the variance
-    dereddened_fits.append(fits.ImageHDU(data=efluxes**2, header=efluxes_fits.header,
-                            name="STAT"))
+    if uncertainties:
+        dereddened_fits[0].header["ERRDATA"] = 'STAT'
+        dereddened_fits[0].header['COMMENT'] = "The STAT contains the variance (if uncertainties were calculated)"
+        dereddened_fits.append(fits.ImageHDU(data=ecorrectedfluxes**2, header=efluxes_fits.header,
+                                name="STAT"))
 
     outfile = os.path.basename(fluxmap).replace(".fits", "_deredden.fits")
     dereddened_fits.writeto(f"{outdir}/{outfile}", overwrite=True)
