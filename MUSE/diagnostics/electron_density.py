@@ -1,8 +1,10 @@
+import os
+
 import pyneb as pn
 from mpdaf.obj import Image
 import numpy as np
 import argparse
-import sys, time
+import time
 
 def calculate_electron_density(sii_ratio_map, T, ext=1, siii_ratio_map=None):
     """
@@ -126,7 +128,7 @@ def main():
                         default=10000)
     parser.add_argument("--SIII6312_SIII9069_ratio", type=str, help="Path to SIII 6312/9069 ratio FITS file", required=False)   
     parser.add_argument('--ext', default=1, help='Extension of the fits file to read', type=int)
-    parser.add_argument('-o', '--output', default='map', help='Output rootname for the electron density map (default: map)')
+    parser.add_argument('-o', '--outdir', default='temden', help='Output directory for the electron density and temperature maps (default: temden)')
     args = parser.parse_args()
     
     T_value = args.temperature
@@ -141,14 +143,18 @@ def main():
     print(f"Loading SII ratio map: {args.SII6716_SII6731_ratio}")
         
     result = calculate_electron_density(args.SII6716_SII6731_ratio, T_value, args.ext, temap)
+
+    output = "map"
+
+    os.makedirs(args.outdir, exist_ok=True)
     
     if is_file:
         # Simultaneous calculation - two outputs
         ne_map, tem_map = result
         
         # Save both maps
-        ne_output = f"ne_{args.output}.fits"
-        tem_output = f"tem_{args.output}.fits"
+        ne_output = f"{args.outdir}/ne_{output}.fits"
+        tem_output = f"{args.outdir}/tem_{output}.fits"
         
         print(f"Saving electron density map to: {ne_output}")
         ne_map.write(ne_output)
@@ -169,7 +175,7 @@ def main():
     else:
         # Single temperature calculation - one output
         ne_map = result
-        output = f"ne_{args.output}_T{T_value:.0f}.fits"
+        output = f"{args.outdir}/ne_{args.output}_T{T_value:.0f}.fits"
         print(f"Saving electron density map to: {output}")
         ne_map.write(output)
         
