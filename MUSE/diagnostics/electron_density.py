@@ -175,7 +175,7 @@ def main():
     else:
         # Single temperature calculation - one output
         ne_map = result
-        output = f"{args.outdir}/ne_{args.output}_T{T_value:.0f}.fits"
+        output = f"{args.outdir}/ne_{output}_T{T_value:.0f}.fits"
         print(f"Saving electron density map to: {output}")
         ne_map.write(output)
         
