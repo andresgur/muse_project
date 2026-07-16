@@ -14,7 +14,6 @@ from lineutils import (
 )
 from astropy.stats import sigma_clipped_stats
 from lmfit.models import PolynomialModel, GaussianModel
-import warnings
 import matplotlib.pyplot as plt
 
 if os.path.isfile("/home/andresgur/.config/matplotlib/stylelib/paper.mplstyle"):
@@ -103,6 +102,7 @@ def create_line_model(
     vmargin=400.0,
     cont_prefix="cont",
     max_FWHM_factor=4,
+    FWHM_broad_factor=8,
 ):
     """Create lmfit model with all the lines to be fitted. Lines sigmas and position are tight to the reference values of other lines.
     Parameters
@@ -117,6 +117,8 @@ def create_line_model(
         +-Margin in km/s (i.e. in velocity space) to considered around the redshifted line centroid for the min and maximum allowed peculiar velocity values
     max_FWHM_factor:int
         Sets the maximum allowed line broadening. This is determined as the initial FWHM value (the instrumental value) x factor
+    FWHM_broad_factor:int
+        Sets the maximum allowed line broadening for broad lines compared to the narrow component. Default is 8.
 
     Returns
     -------
@@ -140,17 +142,17 @@ def create_line_model(
         line_model += GaussianModel(prefix="%s_" % linename)
 
         # add a broadened version of the same line
-        if "broad" in linename:
+        if "broad" in linename and (line.ref is None or line.ref not in lines.keys()):
             logger.info(f"Adding broad component for {linename}")
             line_model.set_param_hint(
-                "%s_vel" % linename, value=0.0, min=-vmargin, max=vmargin, vary=True
+                "%s_vel" % linename, value=0.0, min=-vmargin * 1.5, max=vmargin * 1.5, vary=True
             )
 
             line_model.set_param_hint("%s_center" % linename, expr=velexpr)
             # add param to force the width of the broad line always larger than the narrow component
             # add the name of the line in case there are TWO broad lines
             line_model.set_param_hint(
-                "%s_fwhm_factor" % linename, value=2, min=1.0, max=7.5, vary=True
+                "%s_fwhm_factor" % linename, value=2, min=1.0, max=FWHM_broad_factor, vary=True
             )
             originallinename = linename.replace("_broad", "")
             # the FWHM is a factor broader than the narrow line
@@ -166,10 +168,38 @@ def create_line_model(
             )
             # everything set, we are done here
             continue
+        elif "broad" in linename and line.ref is not None:
+            # tight lines center and sigma to the reference lines
+            refline = lines[line.ref]
+            reflinename = refline.name + "_broad"
+            # link velocity
+            line_model.set_param_hint(
+                "%s_vel" % linename, expr="%s_vel" % (reflinename),
+            )
+            line_model.set_param_hint("%s_center" % linename, expr=velexpr)
+            # link sigma to the other line, and infer sigma for this line based on fwhm_vel
+            line_model.set_param_hint(
+                "%s_fwhm_vel" % linename, expr="%s_fwhm_vel" % reflinename
+            )
+            line_model.set_param_hint(
+                "%s_sigma" % linename,
+                expr="%s_fwhm_vel / 2.355 / %.3f * %s_center"
+                % (linename, ckms, linename),
+            )
+
+            # link the flux
+            line_model.set_param_hint(
+                "%s_factor" % linename, value=line.th, min=line.low, max=line.up
+            )
+            # the amplitude is a factor X stronger than the narrow component
+            line_model.set_param_hint(
+                name="%s_amplitude" % linename,
+                expr="%s_amplitude * %s_factor" % (refline, linename),
+            )
 
         # new narrow line
         else:
-            if line.ref is None:
+            if line.ref is None or line.ref not in lines.keys():
                 ##line_model.set_param_hint("%s_%s_tied" % (linename, previousline.name), min=0, max=100, value=line.wave - previousline.wave)
                 if not "sky" in linename:
                     line_model.set_param_hint(
@@ -192,7 +222,7 @@ def create_line_model(
                 FWHMinst = (
                     get_instrument_FWHM(redshifted)[0] / redshifted * ckms
                 )  # convert to velocity space
-                minFWHM = FWHMinst * 0.7
+                minFWHM = FWHMinst * 0.5
                 maxFWHM = (
                     FWHMinst * max_FWHM_factor
                     if not "sky" in linename
@@ -215,7 +245,7 @@ def create_line_model(
                 refline = lines[line.ref]
                 # link velocity
                 line_model.set_param_hint(
-                    "%s_vel" % linename, expr="%s_vel" % (refline.name)
+                    "%s_vel" % linename, expr="%s_vel" % (refline.name),
                 )
                 line_model.set_param_hint("%s_center" % linename, expr=velexpr)
                 # link sigma to the other line, and infer sigma for this line based on fwhm_vel
@@ -259,7 +289,7 @@ def plot_fit(
     ax = axes[0]
     if normalize:
         norm = result.data.max()
-        ax.set_ylabel("Normalized Flux")
+        ax.set_ylabel("Flux (normalized)")
     else:
         norm = 1
         ax.set_ylabel(rf"Flux ($10^{-20}$ erg cm$^{-2}$ s${-1}$ $\AA^{-1}$)")
@@ -323,7 +353,7 @@ def plot_fit(
                 ls="--",
                 zorder=-10,
                 color=f"C{i+1}",
-                label=f"Component {comp}",
+                # label=f"Component {comp}",
             )
     res = result.best_fit - result.data
     ax = axes[1]
@@ -331,11 +361,19 @@ def plot_fit(
     ax.axhline(0, ls="--", color="black")
     axes[-1].set_ylabel(rf"Residuals")
     axes[0].legend()
-    return fig
+    return fig, axes
 
 
 def fit_spectrum(
-    spectrum, fit_lines, redshift, sigma, wavelengths, degree=1, uncertainties=False
+    spectrum,
+    fit_lines,
+    redshift,
+    sigma,
+    wavelengths,
+    degree=1,
+    uncertainties=False,
+    vmargin=400.0,
+    FWHM_max_factor=4,
 ):
     """Fit a spectrum to the lines defined in fit_lines. The lines are fitted with a Gaussian model and the continuum is fitted with a polynomial model.
     Parameters
@@ -358,7 +396,13 @@ def fit_spectrum(
         usefulstd = spectrum.var[~spectrummask] ** 0.5
         # create lmfit model
         line_model = create_line_model(
-            fit_lines, redshift, sigma=sigma, degree=degree, cont_prefix=cont_prefix
+            fit_lines,
+            redshift,
+            sigma=sigma,
+            degree=degree,
+            cont_prefix=cont_prefix,
+            max_FWHM_factor=FWHM_max_factor,
+            vmargin=vmargin
         )
         nparams = len(line_model.param_names)
         # check if we have enough fluxes to fit the model
@@ -375,17 +419,17 @@ def fit_spectrum(
     )
     c0 = usefulfluxes[0] - c1 * usefulwavelengths[0]
     line_model.set_param_hint(
-        "%s_c0" % cont_prefix, value=c0, min=-np.abs(c0) * 4.0, max=np.abs(c0) * 4.0
+        "%s_c0" % cont_prefix, value=c0, min=-np.abs(c0) * 5.0, max=np.abs(c0) * 5.0
     )  # ) min = usefulfluxes.min(), max=usefulfluxes.max())# min=usefulfluxes.min() - 5. *stddev, max=median + stddev * 5.0)
     if degree >= 1:
         line_model.set_param_hint(
-            "%s_c1" % cont_prefix, value=c1, min=-np.abs(c1) * 2.0, max=np.abs(c1) * 3.0
+            "%s_c1" % cont_prefix, value=c1, min=-np.abs(c1) * 2.0, max=np.abs(c1) * 5.0
         )  # min=-10000., max=10000.)
     for linename in fit_lines.keys():
         # assign sigma and amplitude base on data
         refline = fit_lines[linename].ref
         # no reference line
-        if refline is None:
+        if refline is None or refline not in fit_lines.keys():
             centroid = compute_shift(
                 fit_lines[linename].wave,
                 redshift,
