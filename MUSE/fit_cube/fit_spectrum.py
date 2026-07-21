@@ -340,7 +340,7 @@ if __name__ == "__main__":
 
         if previouslinename == linename:
             linename += "_broad"
-        print(f"Processing {linename}")
+        
         line = fit_lines[linename]
         best_values = result.params
 
@@ -365,7 +365,7 @@ if __name__ == "__main__":
                 # Parameter uncertainty
                 error_value = np.nan
                 if conf is not None:
-                    if line.ref:
+                    if line.ref in fit_lines:
                         # replace only the actual line name, not the broad bit
                         refparam = param_name.replace(linename.replace("broad", "_"), line.ref)
                         if (par=="vel" or par=="fwhm_vel"):
@@ -402,7 +402,7 @@ if __name__ == "__main__":
 
                 elif param.stderr is not None:
                     # get the error from the line or from it's ref if tied
-                    if line.ref:
+                    if line.ref in fit_lines:
                         refparam = param_name.replace(linename, line.ref)
                         if (par=="vel" or par=="fwhm_vel"):
                             error_value = best_values[refparam].stderr
@@ -449,6 +449,8 @@ if __name__ == "__main__":
                         fwhm_vel_corrected, efwhm_vel_corrected = correct_FWHM(
                             param.value, FWHM_instvel, error_value, eFWHM_instvel
                         )
+                        print(f"FWHM inst angstroms {FWHM_inst:.2f} {eFWHM_inst:.3f} {eFWHM_inst/FWHM_inst} {eFWHM_instvel/FWHM_instvel}")
+                        print(f"param value {param.value:.3f} {error_value:.3f}, FWHM_inst {FWHM_instvel:.2f} {eFWHM_instvel:.3f}, FWHM_VEL corrected {fwhm_vel_corrected:.2f}, {efwhm_vel_corrected:.1f}, ewavelength {ewavelength:.2f}")
 
                         # f = A**2 - B **2
                         # df/dA = 2A
