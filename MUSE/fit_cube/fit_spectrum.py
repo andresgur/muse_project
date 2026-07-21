@@ -10,6 +10,7 @@ import numpy.ma as ma
 from lmfit.model import save_model
 from lmfit.printfuncs import ci_report
 from math import pi
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger("fit_spectrum")
 
@@ -39,14 +40,14 @@ def check_input_lines(linegroups):
 
         # Check if lines exist in catalog
         for line in lines_in_group:
-            if line not in CATALOG_LINES:
+            if line.strip("_") not in CATALOG_LINES:
                 raise ValueError(
                     f"Line {line} not found in catalog. Please check the line name or add it to the catalog. Available lines: {CATALOG_LINES.keys()}"
                 )
 
         # Check if lines are in ascending wavelength order
         if len(lines_in_group) > 1:
-            wavelengths = [CATALOG_LINES[line].wave for line in lines_in_group]
+            wavelengths = [CATALOG_LINES[line.strip("_")].wave for line in lines_in_group]
             if wavelengths != sorted(wavelengths):
                 raise ValueError(
                     f"Lines in group '{group}' are not in ascending wavelength order. "
@@ -83,14 +84,23 @@ if __name__ == "__main__":
         help="Optional distance in Mpc to estimate line luminosities",
         type=float,
     )
+    
+    parser.add_argument(
+        "--FWHM",
+        nargs="?",
+        help="Initial guess for the FWHM width of the lines in numbers of instrumental resolution",
+        default=1,
+        type=float,
+    )
     parser.add_argument(
         "-s",
         "--sigma",
         nargs="?",
-        help="Initial guess for the width (sigma) of the lines in Angstroms. Default 1.4 Angstroms",
-        default=1.4,
+        help="Number of sigmas for the uncertainties",
+        default=1,
         type=float,
     )
+    parser.add_argument("--vmargin", default=300, nargs="?", type=float, help="Margin in velocity space in km/s")
     parser.add_argument(
         "-o",
         "--outdir",
@@ -116,6 +126,13 @@ if __name__ == "__main__":
         default="HeII4686",
         help="Space-separated groups of comma-separated lines to fit. (e.g. if you want two groups with same continuum: HBETA OIII4959,OIII5007)",
         type=str,
+    )  #
+    parser.add_argument(
+        "--FWHM_factor",
+        nargs="?",
+        default=4,
+        help="Maximum FWHM allowed for the narrow line. This is times the instrumental resolution. Default 4",
+        type=float,
     )  #
     args = parser.parse_args()
 
@@ -150,6 +167,8 @@ if __name__ == "__main__":
     # Margins to cut the spectrum around the blue and red lines of each group
     margin = args.window  # Angstroms
 
+    FWHM_max_factor = args.FWHM_factor
+
     # create waveleneght cuts
     wav_cuts = np.zeros((len(inputgroups), 2), dtype=float)
     # we need these variables for later
@@ -161,13 +180,19 @@ if __name__ == "__main__":
         linegroups.append(grouplines)
         # make wavelength range based on the first and last line of the group
 
-        minwav = CATALOG_LINES[grouplines[0]].wave * (1 + redshift) - margin
-        maxwav = CATALOG_LINES[grouplines[-1]].wave * (1 + redshift) + margin
+        minwav = CATALOG_LINES[grouplines[0].strip("_")].wave * (1 + redshift) - margin
+        maxwav = CATALOG_LINES[grouplines[-1].strip("_")].wave * (1 + redshift) + margin
         wav_cuts[index] = (minwav, maxwav)
         for line in grouplines:
-            if line in fit_lines.keys():
+            if line.strip("_") in fit_lines.keys():
                 logger.info(f"Adding broad component for {line}")
-                fit_lines[f"{line}_broad"] = CATALOG_LINES[line]
+                if line.endswith("_"):
+                    fit_lines[f"{line.strip("_")}_broad_"] = CATALOG_LINES[line.strip("_")]
+                else:    
+                    fit_lines[f"{line}_broad"] = CATALOG_LINES[line]
+            if line.endswith("_"):
+                logger.info(f"Adding {line.strip("_")} with frozen velocity")
+                fit_lines[line] = CATALOG_LINES[line.strip("_")]
             else:
                 fit_lines[line] = CATALOG_LINES[line]
 
@@ -181,7 +206,7 @@ if __name__ == "__main__":
     step = data_spectrum.wave.get_step()
     # cut the cube over the wavelength range we will not needed
     data_spectrum.mask_region(
-        waveinit - step * 1.01, waveend + step * 1.01, inside=False
+        waveinit - step * 2.01, waveend + step * 2.01, inside=False
     )
     data_spectrum.crop()
     if np.all(data_spectrum.mask):
@@ -190,7 +215,10 @@ if __name__ == "__main__":
         )
 
     # mask the data spectrum outside the wavelength range of interest, important to copy here
+
+    # here is symmetric
     original_mask = data_spectrum.data.mask.copy()
+    # data_spectrum.plot()
     # mask the entire range by default
     data_spectrum[:] = ma.masked
     # in the wavelength range of interest, keep the original mask
@@ -198,16 +226,17 @@ if __name__ == "__main__":
         lmin, lmax = wav_range
         logger.info(f"Masking wavelength range {lmin} - {lmax} Angstroms")
         minindex = data_spectrum.wave.pixel(lmin, nearest=True)
-        maxindex = data_spectrum.wave.pixel(lmax, nearest=True)
+        maxindex = data_spectrum.wave.pixel(lmax + 2, nearest=True)
         # Unmask this wavelength range, but preserve original mask
         data_spectrum.data.mask[minindex:maxindex] = original_mask[minindex:maxindex]
 
     wavelengths = data_spectrum.wave.coord()
-
+    # data_spectrum.plot()
+    
     logger.info(
         f"Fitting spectrum {specname} with {len(fit_lines)} lines,  {len(linegroups)} line groups"
     )
-
+    vmargin=args.vmargin
     try:
         result, conf = fit_spectrum(
             data_spectrum,
@@ -217,6 +246,8 @@ if __name__ == "__main__":
             wavelengths=wavelengths,
             degree=degree,
             uncertainties=True,
+            FWHM_max_factor=FWHM_max_factor,
+            vmargin=vmargin,
         )
     except (SpectrumMaskedError, DofError) as e:
         logger.error(f"Fitting failed: {e}")
@@ -226,7 +257,7 @@ if __name__ == "__main__":
     if conf is not None:
         print(ci_report(conf, ndigits=3))
     if len(fit_lines) == 1:
-        fig = plot_fit(
+        fig, axes = plot_fit(
             result,
             lref=fit_lines[line].wave,
             z_sys=redshift,
@@ -234,17 +265,63 @@ if __name__ == "__main__":
             normalize=False,
         )
     else:
-        fig = plot_fit(
+        fig, axes = plot_fit(
             result,
+            # lref=fit_lines[line].wave,
             z_sys=redshift,
             annotate=False,
-            normalize=False,
+            normalize=True,
         )
-
-    fig.savefig(f"{outpath}/{linegroupout}_fit")
+    #axes[0].text(
+    #        0.15, 0.8, "HeII" + r"$\lambda$4686", fontsize=24, transform=axes[0].transAxes
+    #)
+    #plt.show()
+    fig.savefig(f"{outpath}/{linegroupout}_fit.png")
 
     cont_prefix = "cont"
-    noise = np.std(result.data - result.best_fit)
+    best_fit = result.best_fit
+    data = result.data
+    res = result.data - result.best_fit
+    x = result.userkws["x"]
+    xnew = np.linspace(x.min(), x.max(), 500)
+    comps = result.eval_components(x=xnew)
+    # store outputs
+    # --- Save data file (observed wavelength grid) ---
+    data_out = np.column_stack([
+        x,
+        data,
+        1 / result.weights,
+        best_fit,
+        res
+    ])
+    np.savetxt(
+        f"{outpath}/{linegroupout}_data.tsv",
+        data_out,
+        delimiter='\t',
+        header='wave\tflux\terror\tbest_fit\tresidual'
+    )
+
+    # --- Save model file (fine wavelength grid) ---
+    xnew = np.linspace(x.min(), x.max(), len(x) * 500)
+    comps = result.eval_components(x=xnew)
+
+    cont_cols   = [comps[k] for k in comps if k.startswith(cont_prefix)]
+    line_cols   = [comps[k] for k in comps if not k.startswith(cont_prefix)]
+    line_names  = [k.rstrip('_') for k in comps if not k.startswith(cont_prefix)]
+    cont_names  = [k.rstrip('_') for k in comps if k.startswith(cont_prefix)]
+
+    continuum = np.sum(cont_cols, axis=0) if cont_cols else np.zeros_like(xnew)
+    total     = result.eval(x=xnew)
+
+    model_out = np.column_stack([xnew, total, continuum] + line_cols)
+    header    = '\t'.join(['wave', 'total', 'continuum'] + line_names)
+    np.savetxt(
+        f"{outpath}/{linegroupout}_model.tsv",
+        model_out,
+        delimiter='\t',
+        header=header
+    )
+    noise = np.std(res)
     redchi = result.redchi
     bic = result.bic
     rsquared = result.rsquared
@@ -263,6 +340,7 @@ if __name__ == "__main__":
 
         if previouslinename == linename:
             linename += "_broad"
+        print(f"Processing {linename}")
         line = fit_lines[linename]
         best_values = result.params
 
@@ -287,8 +365,25 @@ if __name__ == "__main__":
                 # Parameter uncertainty
                 error_value = np.nan
                 if conf is not None:
+                    if line.ref:
+                        # replace only the actual line name, not the broad bit
+                        refparam = param_name.replace(linename.replace("broad", "_"), line.ref)
+                        if (par=="vel" or par=="fwhm_vel"):
+                            confpar = conf[param_name.replace(linename, line.ref)]
+                            error_value = get_error(confpar)
+                            if np.isinf(error_value):
+                                error_value = best_values[param_name.replace(linename, line.ref)].stderr
+                        elif par=="amplitude":
+                            print(f"ref line {refparam} for {linename}. Param name {param_name}")
+                            refamplitude = best_values[refparam].value
+                            amplitudefactor = "%s_factor" % linename
+                            confpar = conf[amplitudefactor]
+                            # the error is the amplitude error times the factor
+                            error_value =  get_error(confpar) * refamplitude
+                            if np.isinf(error_value):
+                                error_value = best_values[amplitudefactor].stderr * refamplitude
                     # handle the broad factor
-                    if par == "fwhm_vel" and "broad" in linename:
+                    elif par == "fwhm_vel" and "broad" in linename:
                         confpar = conf["%s_fwhm_factor" % linename]
                         # multiply sigma of the narrow line with the factor
                         error_value = (
@@ -297,16 +392,25 @@ if __name__ == "__main__":
                                 "%s_%s" % (linename.replace("_broad", ""), par)
                             ]
                         )
-
+                        
+                    # normal line
                     elif param_name in conf:
                         confpar = conf[param_name]
-
                         error_value = get_error(confpar)
                         if np.isinf(error_value):
                             error_value = param.stderr
 
                 elif param.stderr is not None:
-                    error_value = param.stderr
+                    # get the error from the line or from it's ref if tied
+                    if line.ref:
+                        refparam = param_name.replace(linename, line.ref)
+                        if (par=="vel" or par=="fwhm_vel"):
+                            error_value = best_values[refparam].stderr
+                        elif par=="amplitude":
+                            amplitudefactor = "%s_factor" % linename
+                            error_value = best_values[refparam].value * best_values[amplitudefactor].stderr
+                    else:
+                        error_value = param.stderr
 
                 param_names.append(f"{param_name}_err")
                 param_values.append(error_value)
@@ -384,7 +488,7 @@ if __name__ == "__main__":
     # Write results to text file
     header = "\t".join(param_names)
     np.savetxt(
-        f"{outpath}/{linegroupout}_fit_results.dat",
+        f"{outpath}/{linegroupout}_fit_results.tsv",
         np.array(param_values).reshape(1, -1),
         header=header,
         fmt="%.6g",
