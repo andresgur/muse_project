@@ -90,7 +90,6 @@ def extract_spectrum(cube, reg_file, mode="sum"):
 
     cube.crop()
     cube.info()
-    cube.write("%s/test.fits" % outdir)
 
     if extraction_mode == 'sum':
         logger.info("Summing output spectra")
@@ -173,6 +172,7 @@ def make_extraction_image(image, source_region, background_region=None, outdir="
     ax.set_xlabel('Ra')
     ax.set_ylabel('Dec')
     img_figure.savefig("%s/extraction_regions.png" % outdir)
+    plt.close()
 
 
 # read arguments
