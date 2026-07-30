@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--FWHM",
         nargs="?",
-        help="Initial guess for the FWHM width of the lines in numbers of instrumental resolution",
+        help="Initial guess for the FWHM width of the lines in numbers of instrumental resolution. Default 1",
         default=1,
         type=float,
     )
@@ -134,6 +134,14 @@ if __name__ == "__main__":
         help="Maximum FWHM allowed for the narrow line. This is times the instrumental resolution. Default 4",
         type=float,
     )  #
+
+    parser.add_argument(
+        "--FWHM_broad_factor",
+        nargs="?",
+        default=5,
+        help="Factor by which the FWHM of any broad component (if given) can be larger than the narrow component. Default is 5.",
+        type=float,
+    )  #
     args = parser.parse_args()
 
     outpath = args.outdir
@@ -168,6 +176,7 @@ if __name__ == "__main__":
     margin = args.window  # Angstroms
 
     FWHM_max_factor = args.FWHM_factor
+    FWHM_broad_factor = args.FWHM_broad_factor
 
     # create waveleneght cuts
     wav_cuts = np.zeros((len(inputgroups), 2), dtype=float)
@@ -190,7 +199,7 @@ if __name__ == "__main__":
                     fit_lines[f"{line.strip("_")}_broad_"] = CATALOG_LINES[line.strip("_")]
                 else:    
                     fit_lines[f"{line}_broad"] = CATALOG_LINES[line]
-            if line.endswith("_"):
+            elif line.endswith("_"):
                 logger.info(f"Adding {line.strip("_")} with frozen velocity")
                 fit_lines[line] = CATALOG_LINES[line.strip("_")]
             else:
@@ -248,6 +257,7 @@ if __name__ == "__main__":
             uncertainties=True,
             FWHM_max_factor=FWHM_max_factor,
             vmargin=vmargin,
+            FWHM_broad_factor=FWHM_broad_factor,
         )
     except (SpectrumMaskedError, DofError) as e:
         logger.error(f"Fitting failed: {e}")
@@ -256,6 +266,8 @@ if __name__ == "__main__":
     print(result.fit_report())
     if conf is not None:
         print(ci_report(conf, ndigits=3))
+    else:
+        logger.warning("Uncertainties could not be estimated!")
     if len(fit_lines) == 1:
         fig, axes = plot_fit(
             result,
@@ -275,7 +287,7 @@ if __name__ == "__main__":
     #axes[0].text(
     #        0.15, 0.8, "HeII" + r"$\lambda$4686", fontsize=24, transform=axes[0].transAxes
     #)
-    #plt.show()
+    plt.show()
     fig.savefig(f"{outpath}/{linegroupout}_fit.png")
 
     cont_prefix = "cont"
@@ -337,9 +349,6 @@ if __name__ == "__main__":
     # Process each line
     previouslinename = None
     for linename in fit_lines.keys():
-
-        if previouslinename == linename:
-            linename += "_broad"
         
         line = fit_lines[linename]
         best_values = result.params
@@ -376,7 +385,7 @@ if __name__ == "__main__":
                         elif par=="amplitude":
                             print(f"ref line {refparam} for {linename}. Param name {param_name}")
                             refamplitude = best_values[refparam].value
-                            amplitudefactor = "%s_factor" % linename
+                            amplitudefactor = f"{linename}_factor"
                             confpar = conf[amplitudefactor]
                             # the error is the amplitude error times the factor
                             error_value =  get_error(confpar) * refamplitude
@@ -384,14 +393,16 @@ if __name__ == "__main__":
                                 error_value = best_values[amplitudefactor].stderr * refamplitude
                     # handle the broad factor
                     elif par == "fwhm_vel" and "broad" in linename:
-                        confpar = conf["%s_fwhm_factor" % linename]
                         # multiply sigma of the narrow line with the factor
-                        error_value = (
-                            get_error(confpar)
-                            * best_values[
-                                "%s_%s" % (linename.replace("_broad", ""), par)
-                            ]
-                        )
+                        confpar = conf[f"{linename}_fwhm_factor"]
+                        try:
+                            reffwhm = best_values[
+                                "%s_%s" % (linename.replace("_broad", ""), par)]
+                        # case where the broad component velocity is fixded (_)
+                        except KeyError:
+                            reffwhm = best_values["%s_%s" % (linename.replace("_broad", "").strip("_"), par)]
+                            
+                        error_value = get_error(confpar) * reffwhm
                         
                     # normal line
                     elif param_name in conf:
@@ -418,7 +429,8 @@ if __name__ == "__main__":
                 if par == "vel":
                     # store for later
                     velocity = param.value
-                    evelocity = error_value
+                    # error is zero if the velocity was frozen
+                    evelocity = error_value if not linename.endswith("_") else 0
                     wavelength, ewavelength = compute_shift(
                         line.wave,
                         z_sys=redshift,
@@ -449,8 +461,6 @@ if __name__ == "__main__":
                         fwhm_vel_corrected, efwhm_vel_corrected = correct_FWHM(
                             param.value, FWHM_instvel, error_value, eFWHM_instvel
                         )
-                        print(f"FWHM inst angstroms {FWHM_inst:.2f} {eFWHM_inst:.3f} {eFWHM_inst/FWHM_inst} {eFWHM_instvel/FWHM_instvel}")
-                        print(f"param value {param.value:.3f} {error_value:.3f}, FWHM_inst {FWHM_instvel:.2f} {eFWHM_instvel:.3f}, FWHM_VEL corrected {fwhm_vel_corrected:.2f}, {efwhm_vel_corrected:.1f}, ewavelength {ewavelength:.2f}")
 
                         # f = A**2 - B **2
                         # df/dA = 2A
