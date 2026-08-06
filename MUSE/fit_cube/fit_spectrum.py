@@ -335,17 +335,21 @@ if __name__ == "__main__":
     )
     noise = np.std(res)
     redchi = result.redchi
-    bic = result.bic
+
+
     rsquared = result.rsquared
-    ndata = data_spectrum.data.size
+    ndata = result.ndata
     nvarys = result.nvarys
+    #bic = result.bic --> lmfit uses a weird definition of the BIC https://github.com/lmfit/lmfit-py/blob/master/lmfit/minimizer.py equivalent to adjusting the variance of the data based on the residuals. 
+    # in this case we have error bars, so best not to use it. Instead we will use the BIC definition from https://en.wikipedia.org/wiki/Bayesian_information_criterion
+    bic = result.chisqr + nvarys * np.log(ndata)
     # Collect all parameter values and errors
     param_values = []
     param_names = []
 
     # Add basic fit statistics
-    param_names.extend(["redchi", "bic", "rsquared", "ndof", "ndata", "ier"])
-    param_values.extend([redchi, bic, rsquared, ndata - nvarys, ndata, result.ier])
+    param_names.extend(["redchi", "bic", "lmfitbic", "rsquared", "ndof", "ndata", "ier"])
+    param_values.extend([redchi, bic, result.bic,rsquared, ndata - nvarys, ndata, result.ier])
     # Process each line
     previouslinename = None
     for linename in fit_lines.keys():
