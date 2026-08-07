@@ -2,9 +2,6 @@
 # -*- coding: utf-8 -*
 import numpy as np
 import logging, os
-import sys
-
-sys.path.append("/home/andresgur/scripts/pythonscripts/maxime_muse/fitting")
 from lineutils import (
     get_instrument_FWHM,
     sigma_to_fwhm,
@@ -97,12 +94,12 @@ def get_initial_fit(model, x):
 def create_line_model(
     lines,
     redshift=0.0,
-    sigma=1.4,
+    FWHM=1.0,
     degree=1,
     vmargin=400.0,
     cont_prefix="cont",
     max_FWHM_factor=4,
-    FWHM_broad_factor=8,
+    FWHM_broad_factor=3,
 ):
     """Create lmfit model with all the lines to be fitted. Lines sigmas and position are tight to the reference values of other lines.
     Parameters
@@ -111,8 +108,8 @@ def create_line_model(
         Lines to be fitted with names as keys
     redshift: float
         Initial guess for the redshift
-    sigma: float
-        Initial guess for the line sigma in Angstroms
+    FWHM: float
+        Initial guess for the line FWHM in terms of the instrumental value (FWHM = factor * FWHM)
     vmargin: float
         +-Margin in km/s (i.e. in velocity space) to considered around the redshifted line centroid for the min and maximum allowed peculiar velocity values
     max_FWHM_factor:int
@@ -140,12 +137,13 @@ def create_line_model(
         redshifted = (1 + redshift) * line.wave if not "sky" in linename else line.wave
 
         line_model += GaussianModel(prefix="%s_" % linename)
+        varyline = False if linename.endswith("_") else True
 
         # add a broadened version of the same line
         if "broad" in linename and (line.ref is None or line.ref not in lines.keys()):
             logger.info(f"Adding broad component for {linename}")
             line_model.set_param_hint(
-                "%s_vel" % linename, value=0.0, min=-vmargin * 1.5, max=vmargin * 1.5, vary=True
+                "%s_vel" % linename, value=0.0, min=-vmargin * 1.5, max=vmargin * 1.5, vary=varyline
             )
 
             line_model.set_param_hint("%s_center" % linename, expr=velexpr)
@@ -154,20 +152,22 @@ def create_line_model(
             line_model.set_param_hint(
                 "%s_fwhm_factor" % linename, value=2, min=1.0, max=FWHM_broad_factor, vary=True
             )
-            originallinename = linename.replace("_broad", "")
+            originallinename = linename.replace("_broad", "").strip("_")
             # the FWHM is a factor broader than the narrow line
             line_model.set_param_hint(
                 "%s_fwhm_vel" % linename,
                 expr=f"{linename}_fwhm_factor * {originallinename}_fwhm_vel",
             )
             # we assing some value to sigma so later on we have a "value" to work with
+
             line_model.set_param_hint(
                 "%s_sigma" % linename,
                 expr=f"{linename}_fwhm_vel / 2.355 * {linename}_center / {ckms:.3f}",
-                value=sigma * 2.0,
+                value=2.0 * line_model.param_hints[f"{originallinename}_sigma"]["value"],
             )
             # everything set, we are done here
             continue
+        # broad line tight to its counterpart
         elif "broad" in linename and line.ref is not None:
             # tight lines center and sigma to the reference lines
             refline = lines[line.ref]
@@ -207,12 +207,12 @@ def create_line_model(
                         value=0.0,
                         min=-vmargin,
                         max=vmargin,
-                        vary=True,
+                        vary=varyline,
                     )
                 else:
                     # sky lines should be centered on the ref line, so allow less margin for velocity shifts
                     line_model.set_param_hint(
-                        "%s_vel" % linename, value=0.0, min=-100, max=100, vary=True
+                        "%s_vel" % linename, value=0.0, min=-100, max=100, vary=varyline
                     )
                 line_model.set_param_hint(
                     "%s_center" % linename,
@@ -228,16 +228,17 @@ def create_line_model(
                     if not "sky" in linename
                     else FWHMinst * 2
                 )
-                FWHMvalue = (
-                    sigma * sigma_to_fwhm / redshifted * ckms
-                )  # convert to sigma
+                FWHMvalue = FWHM * FWHMinst
                 line_model.set_param_hint(
                     "%s_fwhm_vel" % linename, value=FWHMvalue, min=minFWHM, max=maxFWHM
-                )
+                
+                )  # convert to sigma
+                sigmavalue = FWHMvalue * redshifted / ckms / sigma_to_fwhm
+
                 line_model.set_param_hint(
                     "%s_sigma" % linename,
                     expr=f"{linename}_fwhm_vel / 2.355 * {linename}_center / {ckms:.3f}",
-                    value=sigma,
+                    value=sigmavalue,
                 )
             else:
 
@@ -355,7 +356,7 @@ def plot_fit(
                 color=f"C{i+1}",
                 # label=f"Component {comp}",
             )
-    res = result.best_fit - result.data
+    res = result.data - result.best_fit
     ax = axes[1]
     ax.errorbar(xplot, res * result.weights, yerr=1, color="black")
     ax.axhline(0, ls="--", color="black")
@@ -368,12 +369,12 @@ def fit_spectrum(
     spectrum,
     fit_lines,
     redshift,
-    sigma,
     wavelengths,
+    sigma=1,
     degree=1,
     uncertainties=False,
-    vmargin=400.0,
     FWHM_max_factor=4,
+    **kwargs,
 ):
     """Fit a spectrum to the lines defined in fit_lines. The lines are fitted with a Gaussian model and the continuum is fitted with a polynomial model.
     Parameters
@@ -384,7 +385,11 @@ def fit_spectrum(
         Redshift of the object
     degree:int,
         Degree of the polynomial to fit the continuum
+    sigma: int
+        Sigmas for the uncertainty calculation (1, 2 or 3). 1 sigma errors by default
     """
+    if sigma not in [1,2,3]:
+        raise ValueError(f"Sigma ({sigma}) can only be 1, 2 or 3")
     cont_prefix = "cont"
     spectrumfluxes = spectrum.data
     spectrummask = spectrum.mask
@@ -398,11 +403,11 @@ def fit_spectrum(
         line_model = create_line_model(
             fit_lines,
             redshift,
-            sigma=sigma,
+            FWHM=1.2,
             degree=degree,
             cont_prefix=cont_prefix,
             max_FWHM_factor=FWHM_max_factor,
-            vmargin=vmargin
+            **kwargs,
         )
         nparams = len(line_model.param_names)
         # check if we have enough fluxes to fit the model
@@ -419,12 +424,18 @@ def fit_spectrum(
     )
     c0 = usefulfluxes[0] - c1 * usefulwavelengths[0]
     line_model.set_param_hint(
-        "%s_c0" % cont_prefix, value=c0, min=-np.abs(c0) * 5.0, max=np.abs(c0) * 5.0
+        "%s_c0" % cont_prefix, value=c0, min=-np.abs(c0) * 15.0, max=np.abs(c0) * 20.0
     )  # ) min = usefulfluxes.min(), max=usefulfluxes.max())# min=usefulfluxes.min() - 5. *stddev, max=median + stddev * 5.0)
-    if degree >= 1:
+    # linear function
+    if degree > 0:
         line_model.set_param_hint(
-            "%s_c1" % cont_prefix, value=c1, min=-np.abs(c1) * 2.0, max=np.abs(c1) * 5.0
+            "%s_c1" % cont_prefix, value=c1, min=-np.abs(c1) * 7.0, max=np.abs(c1) * 8.0
         )  # min=-10000., max=10000.)
+    # any order above linear, wild guess for boundaries
+    if degree >1:
+        for d in range(1, degree):
+            line_model.set_param_hint(
+                        f"{cont_prefix}_c{d + 1}", value=0, min=-100, max=100)
     for linename in fit_lines.keys():
         # assign sigma and amplitude base on data
         refline = fit_lines[linename].ref
@@ -443,16 +454,16 @@ def fit_spectrum(
                 else len(usefulwavelengths) - 1
             )
             peak_index = np.argmax(usefulfluxes[min_ind:max_ind]) + min_ind
-            sigma = line_model.param_hints[f"{linename}_sigma"]["value"]
-            init_amplitude = (usefulfluxes[peak_index] - median) * sqrt2pi * sigma
+            linesigma = line_model.param_hints[f"{linename}_sigma"]["value"]
+            init_amplitude = (usefulfluxes[peak_index] - median) * sqrt2pi * linesigma
             init_amplitude = 0.0 if init_amplitude < 0 else init_amplitude
             # don't set min to 0 in case init_amplitude is 0
-            maxheight = np.max(usefulfluxes) - (median - stddev) + 5 * usefulstd.max()
+            maxheight = np.max(usefulfluxes) - (median - stddev) + 10 * usefulstd.max()
             # set 10 times the initial amplitude, but if too large restrict it to the max height of the data  + the 5 * std
             maxamplitude = (
-                init_amplitude * 10
-                if init_amplitude * 10 < maxheight * sqrt2pi * (2.0 * sigma)
-                else maxheight * sqrt2pi * (2.0 * sigma)
+                init_amplitude * 20
+                if init_amplitude * 20 < maxheight * sqrt2pi * (2.0 * linesigma)
+                else maxheight * sqrt2pi * (2.0 * linesigma)
             )
             # Convert all values to standard Python float for consistency
             line_model.set_param_hint(
@@ -476,14 +487,15 @@ def fit_spectrum(
     conf = None
     if result.errorbars and result.rsquared > 0.0 and uncertainties:
         try:
-            conf = result.conf_interval(sigmas=[1])
+            logger.debug(f"Calculating {sigma} sigma confidence intervals")
+            conf = result.conf_interval(sigmas=[sigma])
         except ValueError as e:
             return result, None
 
     # if result.redchi>100:
     #
     # print(np.isclose(residual, result.residual), np.isclose(usefulstd, 1.0 / result.weights), np.isclose(chisq,result.chisqr), f"{result.redchi:.2f}")
-    if result.redchi > 1000:
+    if result.redchi > 2800:
         # best_fit = line_model.eval(x=usefulwavelengths, params=result.params)
         # residual = (usefulfluxes - best_fit) / usefulstd
 
@@ -504,3 +516,21 @@ def fit_spectrum(
     # raise AttributeError("Chisq from lmfit is not correct, likely due to numerical issues. Please check the fit.")
 
     return result, conf
+
+def get_bic(result):
+    """Calculate the Bayesian Information Criterion (BIC) for a given fit result.
+    Parameters
+    ----------
+    result: lmfit.model.ModelResult
+        The result of the fit from lmfit
+    Returns
+    -------
+    float
+        The BIC value for the fit
+    """
+    n = result.ndata  # number of data points
+    k = result.nvarys  # number of parameters
+    chi2 = result.chisqr  # chi-squared value
+    bic = chi2 + k * np.log(n)  # BIC formula
+    
+    return bic

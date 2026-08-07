@@ -4,7 +4,7 @@ import numpy as np
 import argparse, os, logging
 from line import Lines
 from lineutils import get_instrument_FWHM, compute_shift, ckms, correct_FWHM
-from fitutils import fit_spectrum, DofError, SpectrumMaskedError, plot_fit, get_error
+from fitutils import fit_spectrum, DofError, SpectrumMaskedError, plot_fit, get_error, get_bic
 from mpdaf.obj import Spectrum
 import numpy.ma as ma
 from lmfit.model import save_model
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     nvarys = result.nvarys
     #bic = result.bic --> lmfit uses a weird definition of the BIC https://github.com/lmfit/lmfit-py/blob/master/lmfit/minimizer.py equivalent to adjusting the variance of the data based on the residuals. 
     # in this case we have error bars, so best not to use it. Instead we will use the BIC definition from https://en.wikipedia.org/wiki/Bayesian_information_criterion
-    bic = result.chisqr + nvarys * np.log(ndata)
+    bic = get_bic(result)
     # Collect all parameter values and errors
     param_values = []
     param_names = []

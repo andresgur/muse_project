@@ -17,7 +17,7 @@ from astropy.io import fits
 from mpdaf.obj import Cube
 
 from fit_cube import parse_linegroups
-from fitutils import DofError, SpectrumMaskedError, fit_spectrum
+from fitutils import DofError, SpectrumMaskedError, fit_spectrum, get_bic
 from line import Lines
 from tqdm import tqdm
 
@@ -86,7 +86,6 @@ def fit_single_spectrum(
     redshift,
     wavelengths,
     degrees=[1],
-    sigma=1.4,
     uncertainties=False,
     x=None,
     y=None,
@@ -104,18 +103,18 @@ def fit_single_spectrum(
                 spectrum,
                 fit_lines,
                 redshift,
-                sigma,
                 wavelengths,
-                degree,
-                uncertainties,
+                degree=degree,
+                uncertainties=uncertainties,
             )
             # set the best result to degree 0 by default
+            resultbic = get_bic(result)
             if best_result is None:
                 best_degree = degree
-                best_bic = result.bic
+                best_bic = resultbic
                 best_result = result
-            elif result.success and result.bic + deltaBIC_threshold < best_bic:
-                best_bic = result.bic
+            elif result.success and resultbic + deltaBIC_threshold < best_bic:
+                best_bic = resultbic
                 best_result = result
 
         except SpectrumMaskedError as err:
@@ -150,7 +149,8 @@ def fit_single_spectrum(
             for k, v in best_result.params.items()
         },
         "redchi": best_result.redchi,
-        "bic": best_result.bic,
+        "bic": best_bic,
+        "lmfitbic": best_result.bic,
         "rsquared": best_result.rsquared,
         "ndata": best_result.ndata,
         "nvarys": best_result.nvarys,
@@ -178,7 +178,6 @@ def main():
         nargs="+",
         help="Polynomial degree(s) for continuum fit to try",
     )
-    parser.add_argument("--sigma", type=float, default=1.4)
     parser.add_argument("--uncertainties", action="store_true")
     parser.add_argument(
         "-o", "--output", help="Output root for pickle results", required=True
@@ -231,7 +230,6 @@ def main():
             redshift=redshift,
             wavelengths=spectrum.wave.coord(),
             degrees=args.degrees,
-            sigma=args.sigma,
             uncertainties=args.uncertainties,
             x=x,
             y=y,
@@ -272,7 +270,6 @@ def main():
         "input_subcube": args.input_subcube,
         "linegroups": linegroups,
         "degrees": args.degrees,
-        "sigma": args.sigma,
         "uncertainties": args.uncertainties,
         "start_idx": start_idx,
         "end_idx": end_idx,
