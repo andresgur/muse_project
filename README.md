@@ -2,19 +2,19 @@
 
 These scripts were developed for [Gúrpide et al. 2022](https://ui.adsabs.harvard.edu/abs/2022A%26A...666A.100G/abstract) and have been regularly updated since then. They allow to extract useful information mainly from MUSE datacubes and images but there's also some functionality to extract fluxes from hst images and chandra PSF profiles. Scripts can be run from the command line. Run `python <script> -h ` to check the input variables and a small description of the script.
 
-# CHANDRA
+## CHANDRA
 marxsim_script.py --> Script to be run from the command line to simulate N PSFs based on a given chandra observation. Ciao and marx need to be properly setup before running the script. 
 
 check_extension.py --> Script to be run after marxsim_script.py has been run to analyse the output. Use python marxsim_script.py -h to obtain the available command line arguments
 
-# HST
+## HST
 aperture_photometry.py --> Script to retrieve magnitudes, fluxes from a given ds9 region (it automatically reads the necessary keywords from the header to perform the corrections). A finite aperture correction is needed for small PSFs. Background subtraction is also possible (must be added a second line in the ds9 region file).
 
 astro_corr.py --> Script to refine the astrometry of several HST images (more than one is possible, and the solution will be global to all of them) using the gaia catalogue. It uses tweakreg https://drizzlepac.readthedocs.io/en/latest/tweakreg.html.
 
-# MUSE
+## MUSE
 
-## Line ratios
+### Line ratios
 lineratio.py --> Script to perform the radio between two line flux maps
 
 ```
@@ -22,7 +22,7 @@ python lineratio.py -n NUMERATORS [NUMERATORS ...] [-en ENUMERATORS [ENUMERATORS
 ```
 Where numeratos and denominators are a space-separed list of fits files. The files with an "e" prefix are the uncertainty maps. -o and -f control the output dir and file naming.
 
-## Reddening
+### Reddening
 deredden.py --> Script to deredden flux line maps, it needs as input the balmer decrement map (Halpha/Hbeta) and it will automatically localize the flux maps
 
 deredden_momcheva.py --> Script to deredden flux line maps (based on e.g. [Momcheva et al. 2013](https://iopscience.iop.org/article/10.1088/0004-6256/145/2/47) see the Appendix), it needs as input the hbeta and halpha directories and it will automatically look for the line flux maps and deredden them.
@@ -33,7 +33,7 @@ Correct cube from Galactic extinction (both Rv and EBV are optional. If not give
 ```
 python deredden_cube.py cube  -R Rv --ebv_gal EBV EBV_err
 ```
-## Utils
+### Utils
 Get the peak position and FWHM of a given ds9 region or entire image
 ```
 python get_image_peak.py <image> -r ds9regionfile.reg --psf [gaussian, moffat] --ext 1 --circular
@@ -57,29 +57,29 @@ Extraction regions             |  Radial averaged profiles
 :-------------------------:|:-------------------------:
 ![Extraction regions](images/OIII5007_HBETAratio_n_4_max_70.png)  |  ![Radial profile](images/OIII5007_HBETAratio_profile_4.png)
 
-## Coordinate adjustment
+### Coordinate adjustment
 adjust_coordinates.py --> Runs a cross-correlation between an input reference image and the cube and estimates the offset needed to adjust the cube coordinates to the reference image (uses mpdaf estimate_coordinate_offset and adjust_coordinates)
 ```
 python adjust_coordinates.py cube.fits --hst <ref image, typically HST>
 ```
-## Diagnostics
+### Diagnostics
 
 H2diags.py --> Computes metallicity maps based on Pilyugin, L. S., & Grebel, E. K. 2016, MNRAS, 457, 3678. 
 A config file is needed and optionally a BPT file to exclude non-H2 regions (currently defined as having an index >1). Otherwise the whole map is used
 python H2diags.py --config metal_config.py -bpt lineratios/bpt_diagrams_v2/BPT_2.fits or simply python H2diags.py --config metal_config.py 
 
-## Spectral extraction
+### Spectral extraction
 extract_spectrum.py --> Extracts a spectrum from a ds9 region file.
 
 
 cleanskyres.py --> Uses [ZAP](https://academic.oup.com/mnras/article/458/3/3210/2589286) to remove sky features. Make sure to mask your sources before hand! (with the -r option you can pass a ds9 with several regions to be masked, ideally you wan to mask bright and extended sources)
-## MAPPINGS
+### MAPPINGS
 
 read_mappings.py --> Script to obtain predicted line ratios from the mapping libraries (python read_mappings.py <files> (for instance V_*_b0_001_s_lines.txt V_*b1_s_lines.txt [MVQP]_*b[0e]_s_lines.txt [MVQ]_*b10_s_lines.txt T_*b0_001_s_lines.txt T_*b1_s_* T_*b10_s_lines.txt). The script will read the paths to the BPT diagrams from bpt_config.py file
 
 read_mappingsV.py --> Script to obtain predicted line ratios from the mapping V libraries. The script will read the paths to the BPT diagrams from bpt_config.py file
 
-## BPT Diagram
+### BPT Diagram
 bpt_colored.py -> Classifies each pixel based on the IFU-improved BPT diagrams from Law+2021. Outputs fits and pngs of BPT diagrams, colored for better visualization
 
 python bpt_colored.py --config config_file (see an example in config_files)
