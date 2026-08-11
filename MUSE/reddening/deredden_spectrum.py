@@ -1,15 +1,16 @@
-    # @Author: Andrés Gúrpide <agurpide>
+# @Author: Andrés Gúrpide <agurpide>
 # @Date:   20-05-2025
-# @Email:  agurpidelash@irap.omp.eu
+# @Email:  a.gurpidelasheras@uva.nl
 # @Last modified by:   agurpide
-# @Last modified time: 10-02-2025
+# @Last modified time: 10-02-2026
 from astropy.io import fits
 import argparse
 import os
 import astropy.units as u
 from fitting.line import Lines
 import sys
-sys.path.append("/home/andresgur/scripts/pythonscripts/maxime_muse/fitting")
+home = os.path.expanduser("~")
+sys.path.append(f"{home}/code/muse/fitting")
 from fitutils import fit_spectrum, plot_fit
 from deredden_utils import galactic_extinction, C00
 from mpdaf.obj import Spectrum
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     ap.add_argument("input_spectrum", help="Path to input spectrum to be analysed", type=str)
     ap.add_argument("-Rv", "--Rv", help="Ratio of total to selective extinction Av/E(B-V). Default Rv=4.05 from Calzetti. Set to 0 to correct for galactic extinction only", 
                     type=float, default=4.05, nargs="?")
-    ap.add_argument("-s", "--sigma", nargs='?', help="Initial guess for the width (sigma) of the lines in Angstroms. Default 1.4 Angstroms", default=1.4, type=float)
+    ap.add_argument("-s", "--sigma", nargs='?', help="Uncertainty level (1, 2 or 3). Default 1, 1 sigma", default=1, choices=[1,2,3])
     ap.add_argument("-z", "--redshift", nargs='?', help="Initial guess for the redshift", default=0.0, type=float)
     ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio. Default 2.86", type=float, default=2.86, nargs="?")
     ap.add_argument("--EBV_gal", help="Line of sight (galactic) EBV to correct for foreground extinction. Uses Rv=3.1 and Cardelli extinction curve.",
@@ -128,7 +129,7 @@ if __name__ == "__main__":
         result, conf = fit_spectrum(data_spectrum, fit_lines, redshift=redshift, sigma=sigma, wavelengths=linewavelengths, degree=1, uncertainties=True)
         save_model(result, f"{outdir}/{line}_model.sav")
         print(ci_report(conf, ndigits=3))
-        fig = plot_fit(linewavelengths[~data_spectrum.mask], result)
+        fig, ax = plot_fit(result, z_sys=redshift, lref=fit_lines[line].wave)
 
         fig.savefig(f"{outdir}/{line}_fit.png", dpi=200)
 
@@ -144,7 +145,7 @@ if __name__ == "__main__":
     kalpha = extinction_curve.evaluate(CATALOG_LINES["HALPHA"].wave * u.AA)
     curve_color_excess = (kbeta - kalpha)
     EBV, EBV_err = division(color_excess, curve_color_excess, ecolor_excess, 0)
-    print(r"Observed ratio: %.2f/%.2f (%.2f\pm%.2f)" % (line_fluxes["HALPHA"][0], line_fluxes["HBETA"][0], observed_ratio, eobserved_ratio))
+    print(r"Observed ratio: %.2f/%.2f (%.2f\pm%.2   f)" % (line_fluxes["HALPHA"][0], line_fluxes["HBETA"][0], observed_ratio, eobserved_ratio))
 
     if EBV - EBV_err < 0:
         print("EBV is negative, avoiding extra extinction correction")
