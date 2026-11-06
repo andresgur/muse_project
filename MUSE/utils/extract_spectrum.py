@@ -19,7 +19,7 @@ import numpy as np
 from regions import Regions
 
 
-def extract_spectrum(cube, reg_file, mode="sum"):
+def extract_spectrum(cube, reg_file, extraction_mode="sum"):
     """Extract spectrum from a cube given a region (from read_ds9) and a mode.
 
     Parameters
@@ -28,8 +28,15 @@ def extract_spectrum(cube, reg_file, mode="sum"):
         Cube to extract the spectrum from
     reg: str
         Region file
-    mode: str
-        Mode can be sum for integrated spectrum, average or psf
+    extraction_mode: str
+        Mode can be sum for integrated spectrum, mean, psf, or individual for
+        spectra with at least one unmasked wavelength
+
+    Returns
+    -------
+    spe: mpdaf.obj.Spectrum or list of mpdaf.obj.Spectrum
+        Extracted spectrum(s) from the cube
+    
     """
     try:
         reg = Regions.read(reg_file, format="ds9")[0]
@@ -153,6 +160,13 @@ def extract_spectrum(cube, reg_file, mode="sum"):
             logger.info("Extracting spectrum weighted by PSF")
             dummy_mask = np.ones((cube.shape[1], cube.shape[2]))  # dummy mask required by the method
             spe = compute_optimal_spectrum(cube, dummy_mask, psf_cube)
+    elif extraction_mode == 'individual':
+        from mpdaf.obj import iter_spe
+        # get spectra from the cube, skipping masked pixels
+        spe = [spectrum for spectrum in iter_spe(cube)
+               if np.ma.count(spectrum.data) > 0]
+
+        
     return spe, cube
 
 
@@ -183,7 +197,7 @@ ap.add_argument("-b", "--background", nargs="?", help="Background region", type=
 ap.add_argument("-o", "--outdir", nargs='?', help="Name of the output directory", default="subcubes", type=str)
 ap.add_argument("--psf", help='Fits file containing the FWHM as a function of wavelength', type=str, nargs='?', default=None)
 ap.add_argument("--e_fraction", help='Energy fraction to be enclosed in the extraction region', type=float, nargs='?', default=0.5)
-ap.add_argument("-m", "--mode", choices=["sum", "mean", "psf"], default="sum", help="Default: sum")
+ap.add_argument("-m", "--mode", choices=["sum", "mean", "psf", "individual"], default="sum", help="Default: sum")
 ap.add_argument("--ext", help='Extension to read from the PSF fits file', type=int, nargs='?', default=2)
 
 args = ap.parse_args()
@@ -235,7 +249,7 @@ for cubefile in muse_cubes:
         logger.error("Cube %s not found. Skipping..." % cubefile)
         continue
     make_extraction_image(cube.sum(axis=0), region_file, args.background, outdir)
-    source_spe, source_subcube = extract_spectrum(cube, region_file, args.mode)
+    source_spe, source_subcube = extract_spectrum(cube, region_file, extraction_mode)
     # create white light image
     if white_light_image is None:
         white_light_image = source_subcube.sum(axis=0)
@@ -246,23 +260,24 @@ for cubefile in muse_cubes:
     #source_subcube.write("%s/%s%s_subcube.fits" % (outdir, outcubename, outname))
 
     # background region is present, subtract it from the source spectrum
-    if args.background is not None:
-        back_spe, bkg_subcube = extract_spectrum(cube, args.background, args.mode)
+    if args.background is not None and extraction_mode!="individual":
+        back_spe, bkg_subcube = extract_spectrum(cube, args.background, extraction_mode)
         bkg_subcube_wl = bkg_subcube.sum(axis=0)
         bkg_subcube_wl.write("%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
         # free memory
         del(bkg_subcube)
         del (bkg_subcube_wl)
         back_spe.write("%s/%s%s_bkgspec.fits" % (outdir, outcubename, outname))
-        if args.mode == "sum":
+        if extraction_mode == "sum":
             logger.info("Subtracting scaled background...")
             bkg_reg = Regions.read(args.background, format="ds9")[0]
             bkg_area = mu.region_to_aperture(bkg_reg, cube.wcs.wcs).area
             source_reg = Regions.read(region_file, format="ds9")[0]
             source_area = mu.region_to_aperture(source_reg, cube.wcs.wcs).area
             back_spe *= source_area / bkg_area
-        corrected_spe = source_spe - back_spe
-        corrected_spe.write("%s/%s%s_source_subspec.fits" % (outdir, outcubename, outname))
+        
+            corrected_spe = source_spe - back_spe
+            corrected_spe.write("%s/%s%s_source_subspec.fits" % (outdir, outcubename, outname))
         plt.figure()
         corrected_spe.info()
         corrected_spe.plot(title="Extracted spectrum for region %s, subtracted background from %s" % (region_file, args.background))
@@ -274,14 +289,36 @@ for cubefile in muse_cubes:
     del source_subcube # free memory
     del cube # free memory
 
-    plt.figure()
-    source_spe.info()
-    source_spe.plot(title="Extracted spectrum for region %s" % region_file)
-    plt.savefig("%s/%s%s_source_spe.png" % ((outdir, outcubename, outname)))
+    if extraction_mode != "individual":
+        plt.figure()
+        source_spe.info()
+        source_spe.plot(title="Extracted spectrum for region %s" % region_file)
+        plt.savefig("%s/%s%s_source_spe.png" % ((outdir, outcubename, outname)))
+        source_spe.primary_header["COMMENT"] = "Spectrum extracted from %s using mode: %s" % (region_file, args.mode)
+        source_spe.write("%s/%s%s_sourcespec.fits" % (outdir, outcubename, outname))
+    else:
+        # let's plot individual spectra in a multipanel plot
+        if not source_spe:
+            logger.warning("No unmasked spectra in region %s for cube %s", region_file, cubefile)
+            continue
+        rows = 5
+        cols = int(np.ceil(len(source_spe) / rows))
+        fig, axes = plt.subplots(rows, cols, figsize=(15, 10), squeeze=False)
+        # add a tile with the region to the WHOLE figure
+        fig.suptitle("Region: %s" % region_file)
+
+        for i in range(len(source_spe)):
+            ax = axes[i // cols, i % cols]
+            spectrum = source_spe[i]
+            spectrum.plot(ax=ax)
+            ax.text(0.5, 0.9, "Slice %d" % i, transform=ax.transAxes, ha="center")
+            spectrum.primary_header["COMMENT"] = "Spectrum extracted from %s using mode: %s" % (region_file, args.mode)
+            spectrum.write("%s/%s%s_sourcespec_%d.fits" % (outdir, outcubename, outname, i))
+        plt.tight_layout()
+        plt.savefig("%s/%s%s_source_spe.png" % (outdir, outcubename, outname))
 
     logger.debug('Writing outputs to %s...' % outdir)
-    source_spe.primary_header["COMMENT"] = "Spectrum extracted from %s using mode: %s" % (region_file, args.mode)
-    source_spe.write("%s/%s%s_sourcespec.fits" % (outdir, outcubename, outname))
+ 
     mu.plot_image("%s/%s%s_whiteimage" % (outdir, outcubename, outname), "%s/%s%s_img.fits" % (outdir, outcubename, outname))
     if args.background is not None:
         mu.plot_image("%s/%s%s_bkgimg" % (outdir, outcubename, outname), "%s/%s%s_bkgimg.fits" % (outdir, outcubename, outname))
