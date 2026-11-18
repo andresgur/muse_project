@@ -54,7 +54,7 @@ if __name__ == "__main__":
     ap.add_argument("-s", "--sigma", nargs='?', help="Uncertainty level (1, 2 or 3). Default 1, 1 sigma", default=1, choices=[1,2,3])
     ap.add_argument("-z", "--redshift", nargs='?', help="Initial guess for the redshift", default=0.0, type=float)
     ap.add_argument("-i", "--intrinsic", help="Intrinsic Balmer decrement ratio. Default 2.86", type=float, default=2.86, nargs="?")
-    ap.add_argument("--EBV_gal", help="Line of sight (galactic) EBV to correct for foreground extinction. Uses Rv=3.1 and Cardelli extinction curve.",
+    ap.add_argument("--EBV_gal", help="Line of sight (galactic) EBV (and its error, otherwise give 0) to correct for foreground extinction. Uses Rv=3.1 and Cardelli extinction curve.",
                 type=float, nargs=2, required=True)
     args = ap.parse_args()
     halpha = CATALOG_LINES["HALPHA"].wave
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     spectrumfits = fits.open(input_spectrum)
 
     dereddened_fits = fits.HDUList(fits.PrimaryHDU(header=spectrumfits[0].header))
-
+    dereddened_fits[0].header['REDSHIFT'] = r"%.5f" % redshift
     # correct for galactic extinction
 
     if EBV_gal[0] > 0:
@@ -95,11 +95,18 @@ if __name__ == "__main__":
         galcorrectedfluxes, egalcorrectedfluxes = galactic_extinction(wavelengths, datafluxes, std, EBV_gal, EBV_gal_err, Rv_CARDELLI)
         dereddened_fits[0].header['R_v_gal'] = r"%.2f" % Rv_CARDELLI
         dereddened_fits[0].header['EBV_gal'] = r"%.3f" % EBV_gal
-        dereddened_fits[0].header['EBV_galerr'] = r"%.4f" % EBV_gal_err
+        dereddened_fits[0].header['EBV_gal_err'] = r"%.4f" % EBV_gal_err
 
         correctedspectrum = spectrum.copy()
         correctedspectrum.data = galcorrectedfluxes
         correctedspectrum.var = egalcorrectedfluxes**2.
+        dereddened_fits.append(fits.ImageHDU(data=galcorrectedfluxes, header=spectrumfits[1].header, name="DATA"))
+        dereddened_fits.append(fits.ImageHDU(data=egalcorrectedfluxes**2, header=spectrumfits[2].header,
+                                    name="STAT"))
+        dereddened_fits[0].header['COMMENT'] = "The STAT contains the variance (if uncertainties were calculated)"
+        outfile = os.path.basename(input_spectrum).replace(".fits", "_deredden.fits")
+        dereddened_fits.writeto(f"{outdir}/{outfile}", overwrite=True)
+        print("Dereddened spectrum stored to %s" % (outfile))
     else:
         correctedspectrum = spectrum
 
@@ -145,7 +152,7 @@ if __name__ == "__main__":
     kalpha = extinction_curve.evaluate(CATALOG_LINES["HALPHA"].wave * u.AA)
     curve_color_excess = (kbeta - kalpha)
     EBV, EBV_err = division(color_excess, curve_color_excess, ecolor_excess, 0)
-    print(r"Observed ratio: %.2f/%.2f (%.2f\pm%.2   f)" % (line_fluxes["HALPHA"][0], line_fluxes["HBETA"][0], observed_ratio, eobserved_ratio))
+    print(r"Observed ratio: %.2f/%.2f (%.2f\pm%.2f)" % (line_fluxes["HALPHA"][0], line_fluxes["HBETA"][0], observed_ratio, eobserved_ratio))
 
     if EBV - EBV_err < 0:
         print("EBV is negative, avoiding extra extinction correction")
@@ -164,10 +171,14 @@ if __name__ == "__main__":
     dereddened_fluxes = remove(mag_ext, correctedspectrum.data)
     vardereddened_fluxes = remove(mag_ext, correctedspectrum.var**0.5)**2 + (Av_err * fluxes * log(10) * 0.4)**2
     dereddened_fits.append(fits.ImageHDU(data=dereddened_fluxes.data, header=spectrumfits[1].header, name="DATA"))
+    
     dereddened_fits[0].header['CURVE'] = r"%s" % curve
     dereddened_fits[0].header['R_v'] = "%.2f" % args.Rv
     dereddened_fits[0].header['EBV'] = "%.3f" % EBV
     dereddened_fits[0].header['EBV_err'] = "%.3f" % EBV_err
+    dereddened_fits[0].header['Ha/Hb_i'] = "%.3f" % intrinsic_ratio
+    dereddened_fits[0].header['Ha/Hb_obs'] = "%.3f" % observed_ratio
+    dereddened_fits[0].header['Ha/Hb_obs_err'] = "%.3f" % eobserved_ratio
     dereddened_fits[0].header['COMMENT'] = "Observed ratio: %.2f/%.2f (%.2f)" % (line_fluxes["HALPHA"][0], line_fluxes["HBETA"][0], observed_ratio)
     dereddened_fits[0].header['COMMENT'] = "The STAT contains the variance (if uncertainties were calculated)"
     # we save the variance
