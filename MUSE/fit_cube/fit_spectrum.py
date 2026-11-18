@@ -3,8 +3,8 @@
 import numpy as np
 import argparse, os, logging
 from line import Lines
-from lineutils import get_instrument_FWHM, compute_shift, ckms, correct_FWHM
-from fitutils import fit_spectrum, DofError, SpectrumMaskedError, plot_fit, get_error, get_bic
+from lineutils import get_instrument_FWHM, compute_shift, ckms, correct_FWHM, get_EW
+from fitutils import delta_chi2_prob, fit_spectrum, DofError, SpectrumMaskedError, plot_fit, get_error, get_bic
 from mpdaf.obj import Spectrum
 import numpy.ma as ma
 from lmfit.model import save_model
@@ -263,11 +263,7 @@ if __name__ == "__main__":
         logger.error(f"Fitting failed: {e}")
         exit(1)
     save_model(result, f"{outpath}/{linegroupout}_model.sav")
-    print(result.fit_report())
-    if conf is not None:
-        print(ci_report(conf, ndigits=3))
-    else:
-        logger.warning("Uncertainties could not be estimated!")
+
     if len(fit_lines) == 1:
         fig, axes = plot_fit(
             result,
@@ -295,8 +291,7 @@ if __name__ == "__main__":
     data = result.data
     res = result.data - result.best_fit
     x = result.userkws["x"]
-    xnew = np.linspace(x.min(), x.max(), 500)
-    comps = result.eval_components(x=xnew)
+
     # store outputs
     # --- Save data file (observed wavelength grid) ---
     data_out = np.column_stack([
@@ -316,6 +311,7 @@ if __name__ == "__main__":
     # --- Save model file (fine wavelength grid) ---
     xnew = np.linspace(x.min(), x.max(), len(x) * 500)
     comps = result.eval_components(x=xnew)
+    dely = result.eval_uncertainty(sigma=1, x=xnew)
 
     cont_cols   = [comps[k] for k in comps if k.startswith(cont_prefix)]
     line_cols   = [comps[k] for k in comps if not k.startswith(cont_prefix)]
@@ -325,14 +321,26 @@ if __name__ == "__main__":
     continuum = np.sum(cont_cols, axis=0) if cont_cols else np.zeros_like(xnew)
     total     = result.eval(x=xnew)
 
-    model_out = np.column_stack([xnew, total, continuum] + line_cols)
-    header    = '\t'.join(['wave', 'total', 'continuum'] + line_names)
+    model_out = np.column_stack([xnew, total, dely, continuum] + line_cols)
+    header    = '\t'.join(['wave', 'total', 'dely', 'continuum'] + line_names)
     np.savetxt(
         f"{outpath}/{linegroupout}_model.tsv",
         model_out,
         delimiter='\t',
         header=header
     )
+    print(result.fit_report())
+    if conf is not None:
+        print(ci_report(conf, ndigits=3))
+    else:
+        logger.warning("Uncertainties could not be estimated!")
+        #let's try to force uncertainty calculation
+        for p in result.params:
+            result.params[p].stderr = abs(result.params[p].value * 0.1)
+        conf = result.conf_interval(sigmas=[sigma], prob_func=delta_chi2_prob)
+        print(ci_report(conf, ndigits=3))
+        
+
     noise = np.std(res)
     redchi = result.redchi
 
@@ -364,8 +372,8 @@ if __name__ == "__main__":
         param_names.append(f"{linename}_snr")
         param_values.append(snr)
 
-        # Store basic line parameters
-        linepars = ["amplitude", "vel", "fwhm_vel"]
+        # Store basic line parameters (order matters, first vel -> get wavelength -> then ampltiude, EW -> then FWHM)
+        linepars = ["vel", "amplitude",  "fwhm_vel"]
         for par in linepars:
             param_name = "%s_%s" % (linename, par)
             if param_name in best_values:
@@ -447,11 +455,25 @@ if __name__ == "__main__":
                     param_names.append(f"{linename}_center_err")
                     param_values.append(ewavelength)
 
-                if par == "amplitude" and args.distance is not None:
-                    param_names.append("%s_lum" % linename)
-                    param_values.append(param.value * 4 * pi * D**2)
-                    param_names.append("%s_lum_err" % linename)
-                    param_values.append(error_value * 4 * pi * D**2)
+                if par == "amplitude":
+                    if args.distance is not None:
+                        param_names.append("%s_lum" % linename)
+                        if data_spectrum.unit is None:
+                            conversion = 1
+                        else:
+                            conversion = (1 * data_spectrum.unit.to("erg/(AA s cm**2)"))
+                        param_values.append(param.value * 4 * pi * D**2 * conversion)
+                        param_names.append("%s_lum_err" % linename)
+                        param_values.append(error_value * 4 * pi * D**2 * conversion)
+                    
+                    EW, EW_err = get_EW(
+                            param.value,
+                            wavelength, result, 
+                            eFline=error_value, cont_prefix=cont_prefix + "_")
+                    param_names.append(f"{linename}_EW")
+                    param_values.append(EW)
+                    param_names.append(f"{linename}_EW_err")
+                    param_values.append(EW_err)
 
                 if par == "fwhm_vel":
                     # FWHM corrected and FWHM velocity
@@ -500,6 +522,17 @@ if __name__ == "__main__":
 
         param_names.append(f"cont_c{i}_err")
         param_values.append(error_value)
+
+    # physical quantities
+    if "HALPHA_lum" in param_names:
+        from lineutils import get_SFR
+        Halphalum_index = param_names.index("HALPHA_lum")
+        Halphalum_err_index = param_names.index("HALPHA_lum_err")
+        SFR, SFR_err = get_SFR(param_values[Halphalum_index]), get_SFR(param_values[Halphalum_err_index])
+        param_values.append(SFR)
+        param_names.append("SFR")
+        param_values.append(SFR_err)
+        param_names.append("SFR_err")
 
     # Write results to text file
     header = "\t".join(param_names)
