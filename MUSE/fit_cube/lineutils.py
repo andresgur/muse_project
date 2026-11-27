@@ -4,6 +4,10 @@ import numpy as np
 from scipy.stats import norm
 ckms = 299792.458
 sigma_to_fwhm = 2.355  # FWHM = 2.355 * sigma
+# LSF based on Bacon et al. 2017 Equation 8 (see also Benoit et al. 2018)
+LSF_A = 5.866e-8
+LSF_B = 9.187e-4
+LSF_C = 6.04
 
 def compute_shift(reference, z_sys, velocity, evelocity=0):
     """Compute the observed wavelength of a line given its reference wavelength, systemic redshift and peculiar velocity. 
@@ -75,12 +79,11 @@ def peculiar_velocity(reference, wavelength, ewavelength=0, z_sys=0):
 
 
 def get_instrument_FWHM(wavelength, ewavelength=0):
-    """Get MUSE FWHM LSF based on Bacon et al. 2017 Equation 8 (see also Benoit et al. 2018) 1
+    """Get MUSE FWHM LSF based on Bacon et al. 2017 Equation 8 (see also Benoit et al. 2018)
 
-    A = 5.866 * 1e-8
-    B = 9.187e-4
-    FWHM_inst = A * wavelength ** 2. - B * wavelength + 6.04
-    eFWHM_inst = np.abs(2 * A * wavelength - B) * ewavelength
+ 
+    FWHM_inst = LSF_A * wavelength ** 2. - LSF_B * wavelength + LSF_C
+    eFWHM_inst = np.abs(2 * LSF_A * wavelength - LSF_B ) * ewavelength
     Parameters
     ----------
     wavelength: float or array-like
@@ -93,9 +96,32 @@ def get_instrument_FWHM(wavelength, ewavelength=0):
     efwhm: float or array-like
         Uncertainty in FWHM in Angstroms
     """
-    A = 5.866 * 1e-8
-    B = 9.187 * 1e-4
-    return A * wavelength ** 2. - B * wavelength + 6.04, np.abs(2 * A * wavelength - B ) * ewavelength
+    return LSF_A * wavelength ** 2. - LSF_B * wavelength + LSF_C, np.abs(2 * LSF_A * wavelength - LSF_B ) * ewavelength
+
+
+def get_instrument_FWHM_vspace(wavelength, ewavelength=0):
+    """Get MUSE FWHM LSF based on Bacon et al. 2017 Equation 8 (see also Benoit et al. 2018) in velocity space
+    This is just the FWHM divided by the wavelength, converted to velocity units (km/s) (FWHM/lambda x c).
+
+
+    Parameters
+    ----------
+    wavelength: float or array-like
+        Wavelength in Angstroms
+
+    Returns
+    ------- 
+    fwhm: float or array-like
+        FWHM in km/s
+    efwhm: float or array-like
+        Uncertainty in FWHM in km/s
+    """
+    fwhm, _ = get_instrument_FWHM(wavelength)
+    fwhm_vel = ckms * fwhm / wavelength
+    # this is the derivative of c FWHM/lambda = c x (LSF_A * wavelength - LSF_B + LSF_C / wavelength)
+    efwhm_vel = ckms * np.abs(LSF_A - LSF_C / wavelength**2) * ewavelength
+    return fwhm_vel, efwhm_vel
+
 
 
 def correct_FWHM(FWHM_obs, FWHM_inst, eFWHM_obs, eFWHM_inst):
